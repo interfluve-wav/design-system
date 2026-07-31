@@ -21,9 +21,37 @@ A dense grid of ~42 circles on a square lattice. Circles open into rings by bori
 
 **Run the demo:**
 ```bash
-cd dotcut/public
+cd cards-close=off/public
 python3 -m http.server 8000
-# then open http://localhost:8000/dotcut-demo.html
+# then open http://localhost:8000/cards-demo.html
+```
+
+### cards-close=off (`cards-close=off/`)
+
+A short lowercase sentence ("design is how it works") rendered as a seamless horizontal bar of adjacent solid-color SVG tiles. Each word is its own rectangle, auto-sized to glyph widths, uniform height, no gaps, the whole bar rounded as one unit. Each tile carries a bold, saturated, deliberately-clashing swatch with baked-in auto-contrast text (white on dark, near-black on bright). On reveal the tiles fly in via `clip-path`-style `grid-template-columns` transitions (text never distorts). The bar then idly shuffles — each tile re-rolls to a different swatch on its own timer, and hovering a tile re-rolls it immediately. Plain DOM/CSS, no canvas or framework. Reduced-motion shows the assembled bar, static.
+
+**Key design constraints:**
+- Framework-agnostic core: mount on any element, `start()`/`stop()`/`destroy()` lifecycle
+- Word measurement via off-screen canvas `measureText` → per-letter SVG `<rect>` masks + `<text>` overlay
+- Clip-open animation uses `grid-template-columns` (`0fr → 1fr`) with `overflow: hidden`, not `scaleX` — text never distorts
+- Shuffle loop is a single `requestAnimationFrame` tick checking per-tile timers
+- Hover re-roll excludes colors currently in use by other tiles for contrast
+- `prefers-reduced-motion` short-circuits to `renderStill()` (static assembled bar)
+
+**Files:**
+- `src/palette.ts` — word list, swatch array with baked foreground colors, random selection helpers
+- `src/measure.ts` — off-screen canvas word/letter measurement utilities
+- `src/engine.ts` — `DesignTiles` class: DOM construction, layout, fly-in, shuffle loop, hover
+- `src/index.ts` — barrel export
+- `src/style.css` — host container styles
+- `public/cards-demo.html` — standalone demo (opens in any browser, no build step)
+- `assets/` — renders and reference captures
+
+**Run the demo:**
+```bash
+cd cards-close=off/public
+python3 -m http.server 8000
+# then open http://localhost:8000/cards-demo.html
 ```
 
 ## Adding a new system

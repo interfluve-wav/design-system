@@ -4,6 +4,9 @@ dist/
 node_modules/
 *.log
 
+# Python
+.venv/
+
 # OS
 .DS_Store
 Thumbs.db

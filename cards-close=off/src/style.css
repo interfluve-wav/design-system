@@ -1,0 +1,13 @@
+.design-tiles-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  font-family: var(--font-kyoto, ui-monospace, monospace);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .design-tiles-host {
+    overflow: hidden;
+  }
+}
