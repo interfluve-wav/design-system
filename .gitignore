@@ -1,0 +1,17 @@
+# Build artifacts
+build/
+dist/
+node_modules/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Keep assets dir but not its contents
+assets/*
+!assets/.gitkeep
