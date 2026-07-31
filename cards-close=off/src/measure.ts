@@ -45,7 +45,7 @@ export function measureWord(
   try {
     const { ctx } = getCanvas();
     ctx.font = fontWeight + " " + REF_FS + "px " + fontFamily;
-    ctx.textBaseline = "top";
+    ctx.textBaseline = "alphabetic";
 
     const full = ctx.measureText(word);
     const fm = full.fontBoundingBoxAscent ?? REF_FS * 0.7;
@@ -56,14 +56,19 @@ export function measureWord(
     for (const ch of word) {
       const gm = ctx.measureText(ch);
       const gw = gm.width;
-      const top = -fm;
-      const bottom = fd;
+      // With textBaseline="alphabetic", y=0 is the baseline
+      // actualBoundingBoxAscent is positive (distance above baseline)
+      // actualBoundingBoxDescent is positive (distance below baseline)
+      const ascent = gm.actualBoundingBoxAscent ?? fm;
+      const descent = gm.actualBoundingBoxDescent ?? fd;
+      const top = -ascent;
+      const bottom = descent;
       glyphs.push({
         ch,
         x,
         y: top,
         w: gw,
-        h: fm + fd,
+        h: ascent + descent,
         top,
         bottom,
       });

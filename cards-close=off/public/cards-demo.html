@@ -75,7 +75,7 @@
     function measureWord(word, fontFamily, fontWeight) {
       const { ctx } = getMeasureCanvas();
       ctx.font = fontWeight + " " + REF_FS + "px " + fontFamily;
-      ctx.textBaseline = "top";
+      ctx.textBaseline = "alphabetic";
       const full = ctx.measureText(word);
       const fm = full.fontBoundingBoxAscent || REF_FS * 0.7;
       const fd = full.fontBoundingBoxDescent || REF_FS * 0.3;
@@ -83,14 +83,16 @@
       let x = 0;
       for (const ch of word) {
         const gm = ctx.measureText(ch);
+        const ascent = gm.actualBoundingBoxAscent || fm;
+        const descent = gm.actualBoundingBoxDescent || fd;
         glyphs.push({
           ch,
           x,
-          y: -fm,
+          y: -ascent,
           w: gm.width,
-          h: fm + fd,
-          top: -fm,
-          bottom: fd,
+          h: ascent + descent,
+          top: -ascent,
+          bottom: descent,
         });
         x += gm.width;
       }
@@ -124,9 +126,7 @@
       });
       root.setAttribute("aria-label", WORDS.join(" "));
 
-      const fontFamily =
-        getComputedStyle(root).fontFamily ||
-        "var(--font-kyoto), sans-serif";
+      const fontFamily = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
       const bar = document.createElement("div");
       Object.assign(bar.style, { display: "flex", alignItems: "center" });

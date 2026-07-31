@@ -66,8 +66,7 @@ export class DesignTiles {
     root.setAttribute("aria-label", WORDS.join(" "));
 
     this.fontFamily =
-      getComputedStyle(root).fontFamily ||
-      "var(--font-kyoto), var(--font-neue-montreal), sans-serif";
+      "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
     const bar = document.createElement("div");
     Object.assign(bar.style, { display: "flex", alignItems: "center" });
@@ -267,7 +266,8 @@ export class DesignTiles {
   }
 
   refreshFont() {
-    this.fontFamily = getComputedStyle(this.root).fontFamily || this.fontFamily;
+    this.fontFamily =
+      "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     for (const tile of this.tiles)
       tile.textEl.setAttribute("font-family", this.fontFamily);
     this.layout();
