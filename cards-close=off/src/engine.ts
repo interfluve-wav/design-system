@@ -1,4 +1,9 @@
-import { WORDS, INITIAL, randomSwatchAvoiding, type Swatch } from "./palette";
+import {
+  DEFAULT_WORDS,
+  INITIAL,
+  randomSwatchAvoiding,
+  type Swatch,
+} from "./palette";
 import { measureWord, REF_FS, BASELINE_Y, type WordMetrics } from "./measure";
 
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -11,6 +16,7 @@ const COLOR_MS = 520;
 
 const PAD_Y = 6;
 const PAD_X = 2;
+const GAP = 10;
 
 const BAND_ASCENT = 82;
 const BAND_DESCENT = 26;
@@ -50,8 +56,9 @@ export class DesignTiles {
   private ro?: ResizeObserver;
   private cleanup: (() => void)[] = [];
 
-  constructor(host: HTMLElement) {
+  constructor(host: HTMLElement, words: string[] = DEFAULT_WORDS) {
     this.host = host;
+    this.tiles = [];
 
     const root = document.createElement("div");
     Object.assign(root.style, {
@@ -63,15 +70,19 @@ export class DesignTiles {
       fontFamily: "var(--font-kyoto), var(--font-neue-montreal), system-ui, sans-serif",
       userSelect: "none",
     });
-    root.setAttribute("aria-label", WORDS.join(" "));
+    root.setAttribute("aria-label", words.join(" "));
 
     this.fontFamily =
       "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
     const bar = document.createElement("div");
-    Object.assign(bar.style, { display: "flex", alignItems: "center" });
+    Object.assign(bar.style, {
+      display: "flex",
+      alignItems: "center",
+      columnGap: `${GAP}px`,
+    });
 
-    WORDS.forEach((word, i) => {
+    words.forEach((word, i) => {
       const sw = INITIAL[i] ?? randomSwatchAvoiding([]);
 
       const outer = document.createElement("span");

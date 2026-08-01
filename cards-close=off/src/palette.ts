@@ -1,5 +1,3 @@
-export const WORDS = ["design", "is", "how", "it", "works"];
-
 export type Swatch = { bg: string; fg: string };
 
 export const SWATCHES: Swatch[] = [
@@ -7,12 +5,14 @@ export const SWATCHES: Swatch[] = [
   { bg: "#ff2e20", fg: "#0a0a0a" },
   { bg: "#f0c2f7", fg: "#0a0a0a" },
   { bg: "#22e58b", fg: "#0a0a0a" },
-  { bg: "#7c4dff", fg: "#ffffff" },
+  { bg: "#7c4dff", fg: "#0a0a0a" },
   { bg: "#ffe14d", fg: "#0a0a0a" },
   { bg: "#18b6ff", fg: "#0a0a0a" },
   { bg: "#ff7a1a", fg: "#0a0a0a" },
   { bg: "#ff4fa3", fg: "#0a0a0a" },
 ];
+
+export const DEFAULT_WORDS = ["design", "is", "how", "it", "works"];
 
 export function randomSwatch(exclude?: Swatch): Swatch {
   if (SWATCHES.length < 2 || !exclude) {

@@ -34,7 +34,7 @@
   </style>
 </head>
 <body>
-  <div id="hint">design is how it works · hover tiles · reduced-motion shows static bar</div>
+  <div id="hint">design is how it works · hover tiles · add ?words=hello,world,foo to customize · rmm shows static bar</div>
   <div id="root"></div>
 
   <script>
@@ -50,7 +50,7 @@
       { bg: "#ff7a1a", fg: "#0a0a0a" },
       { bg: "#ff4fa3", fg: "#0a0a0a" },
     ];
-    const WORDS = ["design", "is", "how", "it", "works"];
+    const DEFAULT_WORDS = ["design", "is", "how", "it", "works"];
     const INITIAL = [SWATCHES[0], SWATCHES[1], SWATCHES[2], SWATCHES[3], SWATCHES[4]];
 
     function randomSwatchAvoiding(used) {
@@ -111,8 +111,9 @@
     const BAND_ASCENT = 82;
     const BAND_DESCENT = 26;
     const BASELINE_Y = 0;
+    const GAP = 10;
 
-    function createDesignTiles(host) {
+    function createDesignTiles(host, words) {
       const root = document.createElement("div");
       Object.assign(root.style, {
         position: "absolute",
@@ -124,12 +125,16 @@
           "var(--font-kyoto), var(--font-neue-montreal), -apple-system, BlinkMacSystemFont, sans-serif",
         userSelect: "none",
       });
-      root.setAttribute("aria-label", WORDS.join(" "));
+      root.setAttribute("aria-label", words.join(" "));
 
       const fontFamily = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
       const bar = document.createElement("div");
-      Object.assign(bar.style, { display: "flex", alignItems: "center" });
+      Object.assign(bar.style, {
+        display: "flex",
+        alignItems: "center",
+        columnGap: GAP + "px",
+      });
 
       const tiles = [];
       let raf = 0;
@@ -138,7 +143,7 @@
       let revealed = false;
       let now = 0;
 
-      WORDS.forEach((word, i) => {
+      words.forEach((word, i) => {
         const sw = INITIAL[i] ?? randomSwatchAvoiding([]);
         const outer = document.createElement("span");
         Object.assign(outer.style, {
@@ -392,7 +397,16 @@
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    const tiles = createDesignTiles(host);
+    // Allow ?words=hello,world,foo to customize the sentence
+    const params = new URLSearchParams(window.location.search);
+    const wordsParam = params.get("words");
+    let words = DEFAULT_WORDS;
+    if (wordsParam) {
+      const parsed = wordsParam.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
+      if (parsed.length > 0) words = parsed;
+    }
+
+    const tiles = createDesignTiles(host, words);
 
     if (prefersReduced) {
       tiles.renderStill();
@@ -401,6 +415,7 @@
     }
 
     window._designTiles = tiles;
+    window._designTilesWords = words;
   </script>
 </body>
 </html>
