@@ -16,7 +16,7 @@ const COLOR_MS = 520;
 
 const PAD_Y = 6;
 const PAD_X = 2;
-const GAP = 10;
+const GAP = 8;
 
 const BAND_ASCENT = 82;
 const BAND_DESCENT = 26;
@@ -98,7 +98,7 @@ export class DesignTiles {
       Object.assign(svg.style, {
         display: "block",
         width: "auto",
-        height: "clamp(1.6rem, 4vw, 2.9rem)",
+        height: "clamp(2.4rem, 6vw, 4rem)",
         opacity: "0",
         transition: `opacity ${Math.round(FLY_MS * 0.8)}ms ease`,
       });
