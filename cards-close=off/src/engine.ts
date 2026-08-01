@@ -16,7 +16,7 @@ const COLOR_MS = 520;
 
 const PAD_Y = 6;
 const PAD_X = 2;
-const GAP = 8;
+const GAP = 7;
 
 const BAND_ASCENT = 82;
 const BAND_DESCENT = 26;
