@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — reel</title>
+<style>
+/* ── theme ─────────────────────────────────────────────────────────────────
+   All colour via custom properties; nothing chromatic hardcoded in JS.
+   design.md: the brand orange is the only colour on a brand surface. The script
+   calls for minimalist white text on black, so that is the base; orange appears
+   once, as the mark and the handle at the sign-off.
+   ──────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#000000;
+  --type:#ffffff;
+  --type-dim:rgba(255,255,255,.50);
+  --accent:#ff6b1a;
+  --mark:#ff6b1a;
+  --pulse:rgba(255,255,255,.040);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ground)}
+body{overflow:hidden;height:100vh}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<link rel="stylesheet" href="../blueprint/public/fonts/bonk.css">
+<script src="../logo/current/bonk-mark.js"></script>
+<script>
+/* ── reel — @bonk.dj, 30 s, 1080x1920 ──────────────────────────────────────
+   Built to the supplied script. Copy is reproduced VERBATIM, including line
+   breaks that only fall where the sentence already allows them -- no wording is
+   changed and no copy is invented.
+
+   Timing: the script's boundaries are 0-5 / 5-10 / 10-18 / 18-25 / 25-30 s. At
+   120 BPM the beat is exactly 0.5 s, so those are beats 10 / 20 / 36 / 50 / 60:
+   every boundary lands on a beat, and the 10-18 s "fast rhythmic cuts" section
+   is exactly 16 beats = 4 bars of four, giving each of the four overlays one
+   full bar. Drop any 120 track under this and the cuts already sit on the grid.
+   At any other tempo the structure still reads, it just stops being locked.
+
+   Structure:
+     0.0- 5.0  line 1 fades up, minimal, holds the whole section
+     5.0-10.0  line 2 crossfades in over 0.3 s -- a transition, not a cut
+    10.0-18.0  four overlays, one bar each, punch on the downbeat, hard out
+    18.0-25.0  the sign-off, three lines arriving on successive beats
+    25.0-30.0  mark + URL + handle, then a clean hold to the end
+
+   A very faint full-frame pulse rides the beat grid throughout (~1.8% white
+   decaying over half a beat). It is deliberately far below the level where it
+   would read as a strobe: it makes the piece feel scored before it has any
+   audio, at roughly the amplitude of a breath.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+const cssv = (n, f) => (getComputedStyle(document.documentElement)
+  .getPropertyValue(n).trim() || f);
+
+const CFG = { ground:'#000', type:'#fff', typeDim:'rgba(255,255,255,.5)',
+              accent:'#ff6b1a', mark:'#ff6b1a', pulse:'rgba(255,255,255,.018)' };
+
+function readTheme(){
+  CFG.ground  = cssv('--ground', '#000');
+  CFG.type    = cssv('--type', '#fff');
+  CFG.typeDim = cssv('--type-dim', 'rgba(255,255,255,.5)');
+  CFG.accent  = cssv('--accent', '#ff6b1a');
+  CFG.mark    = cssv('--mark', '#ff6b1a');
+  /* --pulse was declared in :root but never read into CFG. The draw code asked
+     for CFG.pulse, got undefined, and assigning undefined to fillStyle is
+     silently ignored -- so the fillRect painted the PREVIOUS fillStyle (the
+     black ground) at the pulse alpha, i.e. black on black. The beat pulse was
+     therefore dead code: no error, no visual, and the held sections read as
+     static. 107 of ~150 sampled frame pairs were near-identical, which is what
+     surfaced it. */
+  CFG.pulse   = cssv('--pulse', 'rgba(255,255,255,.018)');
+}
+readTheme();
+
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width  = Math.round(innerWidth  * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+}
+resize();
+addEventListener('resize', () => { resize(); readTheme(); draw(window.__t || 0); });
+
+// ── timing ──────────────────────────────────────────────────────────────────
+const BPM = 120, BEAT = 60 / BPM, DUR = 30;
+const T = {
+  L1:[0.0, 5.0], L2:[5.0, 10.0], CUTS:[10.0, 18.0],
+  SIGN:[18.0, 25.0], END:[25.0, 30.0],
+};
+const clamp01 = k => k < 0 ? 0 : k > 1 ? 1 : k;
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+const expoOut = k => k >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp01(k));
+const smooth = k => { k = clamp01(k); return k * k * (3 - 2 * k); };
+
+/* ── type ──────────────────────────────────────────────────────────────────
+   Auto-fit: find the largest size at which every line fits the safe width, then
+   centre the block. Keeps a long opening sentence and a two-word overlay at
+   consistent optical weight instead of one overflowing and one looking lost. */
+const SAFE = 0.86;
+function fitBlock(lines, maxW, startSize, weight, italic){
+  const style = `${italic ? 'italic ' : ''}${weight}`;
+  let size = startSize;
+  for (let i = 0; i < 40; i++){
+    ctx.font = `${style} ${size}px "Bonk","Bonk Display",system-ui`;
+    const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+    if (widest <= maxW || size < 14) break;
+    size *= maxW / widest;
+  }
+  return size;
+}
+function drawBlock(lines, cx, cy, size, weight, colour, lh, alpha, italic){
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px "Bonk","Bonk Display",system-ui`;
+  ctx.fillStyle = colour;
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const step = size * lh;
+  const y0 = cy - (lines.length - 1) * step / 2;
+  lines.forEach((l, i) => ctx.fillText(l, cx, y0 + i * step));
+  ctx.globalAlpha = 1;
+}
+
+/* ── copy, verbatim ────────────────────────────────────────────────────────
+   Line breaks fall only where the sentence's own structure allows. Nothing is
+   reworded, shortened or invented. */
+const L1 = ['you spent 3 hours', 'fixing your library', 'last week.'];
+const L2 = ['and rekordbox still has', 'duplicate tracks.'];
+const CUTS = ['bulk edits', 'auto genre', 'direct db access', 'no duplicates'];
+const SIGN = ['bonk.', 'built by a dj.', 'for djs.'];
+const ENDL = ['free.', 'bonkmusic.app'];
+
+function draw(t){
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = CFG.ground;
+  ctx.fillRect(0, 0, W, H);
+
+  const U = W;                       // 1080 at capture width
+  const cx = W / 2, cy = H / 2;
+
+  /* ── the beat pulse: flat level between beats, fast decay on each one ─── */
+  const inBeat = (t % BEAT) / BEAT;
+  const hit = Math.pow(1 - inBeat, 3.0);
+  if (hit > 0.002){
+    ctx.fillStyle = CFG.pulse;
+    ctx.globalAlpha = hit;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── 0-5 s · opening line ─────────────────────────────────────────────── */
+  if (t < T.L1[1] + 0.4){
+    const k = smooth(seg(t, 0.35, 1.15));
+    const out = seg(t, T.L1[1] - 0.05, T.L1[1] + 0.35);
+    const a = k * (1 - out);
+    if (a > 0.01){
+      const size = fitBlock(L1, U * SAFE, U * 0.115, 500);
+      drawBlock(L1, cx, cy + (1 - k) * U * 0.030, size, 500, CFG.type, 1.18, a * 0.97);
+    }
+  }
+
+  /* ── 5-10 s · transition, then hold ───────────────────────────────────── */
+  if (t >= T.L2[0] - 0.05 && t < T.L2[1] + 0.4){
+    const k = smooth(seg(t, T.L2[0], T.L2[0] + 0.55));       // 0.3s crossfade
+    const out = seg(t, T.L2[1] - 0.05, T.L2[1] + 0.35);
+    const a = k * (1 - out);
+    if (a > 0.01){
+      const size = fitBlock(L2, U * SAFE, U * 0.135, 500);
+      drawBlock(L2, cx, cy + (1 - k) * U * 0.026, size, 500, CFG.type, 1.18, a * 0.97);
+    }
+  }
+
+  /* ── 10-18 s · four overlays, one bar each, punch on the downbeat ─────── */
+  if (t >= T.CUTS[0] && t < T.CUTS[1]){
+    const bar = 4 * BEAT;                                    // 2.0 s
+    const i = Math.floor((t - T.CUTS[0]) / bar);
+    const local = (t - T.CUTS[0]) - i * bar;
+    if (i >= 0 && i < CUTS.length){
+      const punch = expoOut(local / 0.20);                   // fast in
+      const scale = 1 + 0.055 * (1 - punch);
+      const out = seg(local, bar - 0.10, bar);               // hard-ish out
+      const a = punch * (1 - out);
+      if (a > 0.01){
+        const size = fitBlock([CUTS[i]], U * (CUTS[i].length > 10 ? 0.90 : 0.82),
+                              U * 0.215, 700);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        drawBlock([CUTS[i]], 0, 0, size, 700, CFG.type, 1.1, a);
+        ctx.restore();
+      }
+    }
+  }
+
+  /* ── 18-25 s · sign-off, lines arriving on successive beats ───────────── */
+  if (t >= T.SIGN[0] - 0.1 && t < T.SIGN[1] + 0.5){
+    const out = seg(t, T.SIGN[1] - 0.05, T.SIGN[1] + 0.40);
+    const base = t - T.SIGN[0];
+    const size = fitBlock(SIGN, U * SAFE, U * 0.155, 700);
+    SIGN.forEach((line, i) => {
+      const k = smooth(seg(base, i * BEAT, i * BEAT + 0.42));
+      if (k <= 0.01) return;
+      const step = size * 1.20;
+      const y0 = cy - (SIGN.length - 1) * step / 2;
+      ctx.save();
+      ctx.translate(cx, y0 + i * step + (1 - k) * U * 0.026);
+      ctx.font = `700 ${size}px "Bonk","Bonk Display",system-ui`;
+      ctx.fillStyle = CFG.type;
+      ctx.globalAlpha = k * (1 - out) * 0.97;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(line, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    });
+  }
+
+  /* ── 25-30 s · mark, URL, handle ──────────────────────────────────────── */
+  if (t >= T.END[0] - 0.1){
+    const base = t - T.END[0];
+    const mk = smooth(seg(base, 0.0, 0.9));                 // mark up first
+    const u1 = smooth(seg(base, 0.75, 1.55));               // then the URL
+    const u2 = smooth(seg(base, 1.30, 2.05));               // then the handle
+
+    if (window.BONK_MARK && mk > 0.01){
+      const M = window.BONK_MARK;
+      const gw = U * 0.50, s = gw / M.width, gh = M.height * s;
+      ctx.globalAlpha = mk;
+      ctx.translate(cx - gw / 2, cy - gh / 2 - U * 0.145);
+      ctx.scale(s, s);
+      ctx.translate(-M.origin.x, -M.origin.y);
+      ctx.fillStyle = CFG.mark;
+      ctx.fill(new Path2D(M.d));
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+    }
+
+    if (u1 > 0.01){
+      const size = fitBlock(ENDL, U * SAFE, U * 0.150, 700);
+      drawBlock(ENDL, cx, cy + U * 0.115, size, 700, CFG.type, 1.24, u1 * 0.97);
+    }
+    if (u2 > 0.01){
+      ctx.font = `600 ${Math.round(U * 0.0355)}px "Bonk",system-ui`;
+      ctx.fillStyle = CFG.accent;
+      ctx.globalAlpha = u2 * 0.92;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.letterSpacing = '0.04em';
+      ctx.fillText('@bonk.dj', cx, cy + U * 0.30);
+      ctx.globalAlpha = 1;
+      ctx.letterSpacing = '0em';
+    }
+  }
+}
+
+/* ── deterministic capture ───────────────────────────────────────────────── */
+window.__duration = DUR;
+window.__seek = s => { window.__t = s; draw(s); };
+
+/* A canvas `ctx.font` reference does NOT trigger an @font-face download -- only
+   DOM usage does. With no text nodes on the page the browser never fetches the
+   font and canvas silently renders the fallback, with no error. Verified the hard
+   way: this page rendered pixel-identical to monospace until the load below was
+   added. So load each weight explicitly, and do NOT resolve __ready until they
+   have, or every captured frame races the font.
+   __ready is a Promise on purpose -- Playwright awaits it. */
+window.__ready = (async () => {
+  try {
+    await Promise.all([
+      document.fonts.load("700 40px 'Bonk'"),
+      document.fonts.load("500 40px 'Bonk'"),
+      document.fonts.load("italic 400 40px 'Bonk'"),
+    ]);
+    await document.fonts.ready;
+  } catch (e) { /* fall through -- better a fallback frame than a hang */ }
+  draw(window.__t || 0);
+  return true;
+})();
+draw(0);
+</script>
+</body>
+</html>

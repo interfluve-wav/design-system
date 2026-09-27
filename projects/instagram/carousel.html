@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — carousel</title>
+<link rel="stylesheet" href="../blueprint/public/fonts/bonk.css">
+<style>
+/* ── theme ─────────────────────────────────────────────────────────────────
+   All colour via custom properties; nothing chromatic hardcoded in JS.
+   design.md: the brand orange is the only colour on a brand surface.
+   ──────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#000000;
+  --type:#ffffff;
+  --type-dim:rgba(255,255,255,.56);
+  --accent:#ff6b1a;
+  --rule:rgba(255,255,255,.16);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ground);color:var(--type)}
+
+/* Rendered one slide at a time via ?n=1..5 so each screenshot is exactly one
+   1080x1350 card. Text is DOM, not canvas -- a canvas @font-face reference does
+   not trigger a download, DOM text does, so there is no silent fallback here. */
+.card{
+  width:1080px; height:1350px;
+  padding:96px 92px 84px;
+  display:flex; flex-direction:column;
+  position:relative; overflow:hidden;
+  background:var(--ground);
+  font-family:"Bonk",system-ui;
+}
+
+/* ── header: mark left, handle right ─────────────────────────────────────── */
+.head{display:flex; align-items:center; justify-content:space-between; height:98px}
+.head svg{width:172px; height:auto; display:block}
+.handle{
+  font-size:27px; font-weight:500; letter-spacing:.02em;
+  color:var(--type-dim);
+}
+
+/* ── the teaser line, upper-middle ──────────────────────────────────────── */
+.teaser{
+  margin-top:168px;
+  font-size:104px; font-weight:600; line-height:1.06;
+  letter-spacing:-.018em;
+  max-width:900px;
+}
+.teaser em{
+  font-style:italic; font-weight:500;
+  /* the accent word is the one place the eye is allowed to rest */
+}
+.teaser .accent{color:var(--accent)}
+
+/* ── the body, low ──────────────────────────────────────────────────────── */
+.body{
+  margin-top:auto;
+  font-size:41px; font-weight:400; line-height:1.44;
+  color:var(--type-dim);
+  max-width:880px;
+  letter-spacing:.002em;
+}
+
+/* ── slide 5 is the only one with a link, given its own weight ──────────── */
+.link{
+  margin-top:52px;
+  font-size:58px; font-weight:600;
+  color:var(--accent); letter-spacing:-.012em;
+}
+
+/* ── position dots, quiet, bottom-left ──────────────────────────────────── */
+.dots{display:flex; gap:11px; margin-top:64px}
+.dots i{width:9px; height:9px; border-radius:50%; background:var(--rule); display:block}
+.dots i.on{background:var(--type); opacity:.92}
+</style>
+</head>
+<body>
+<div class="card" id="card"></div>
+<script>
+/* ── carousel copy, verbatim ───────────────────────────────────────────────
+   Headlines and bodies are reproduced exactly as supplied. <em> marks a single
+   accent word per headline -- an emphasis device, not a rewrite; no wording is
+   changed and nothing is added except the slide-position dots.
+   ──────────────────────────────────────────────────────────────────────── */
+const SLIDES = [
+  { t:'your rekordbox library <em>deserves</em> better.',
+    b:'Bonk fixes metadata without breaking your cues or duplicating your collection.' },
+  { t:'<em>bulk</em> edit everything.',
+    b:'Artists, genres, labels \u2014 across hundreds of tracks at once. Safe writes for MP3, M4A, FLAC, AIFF, WAV.' },
+  { t:'auto genre. <em>finally.</em>',
+    b:'Classifies your tracks using Discogs models. (Beta \u2014 invite only.)' },
+  { t:'build <em>better</em> sets.',
+    b:'Smart playlists. Chapter folders. PathFlo and JourneyFlo for harmonic and sectional set building. (Beta.)' },
+  { t:'free. open source. <em>yours.</em>',
+    b:'No subscription. No telemetry. MIT licensed.',
+    link:'bonkmusic.app' },
+];
+
+const n = Math.max(1, Math.min(5, parseInt(new URLSearchParams(location.search).get('n') || '1', 10)));
+const s = SLIDES[n - 1];
+
+document.getElementById('card').innerHTML = `
+  <div class="head">
+    <svg viewBox="687 869 627 262" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="handle">@bonk.dj</div>
+  </div>
+  <div class="teaser">${s.t}</div>
+  <div class="body">${s.b}</div>
+  ${s.link ? `<div class="link">${s.link}</div>` : ''}
+  <div class="dots">${SLIDES.map((_, i) => `<i class="${i === n - 1 ? 'on' : ''}"></i>`).join('')}</div>
+`;
+window.__slide = n;
+window.__ready = document.fonts.ready.then(() => true);
+</script>
+<!-- the canonical mark, injected straight into the head slot from the real asset.
+
+     Two traps handled here:
+     1. The asset carries a background rectangle ahead of the six glyphs (a bare
+        d, no cubics, in the opposite fill). Keep only the majority-fill paths --
+        that is the glyphs, and it stays correct if the background changes colour.
+     2. The glyphs carry fill="white" in the source. Copying only the d attributes
+        drops it, and SVG's default fill is BLACK -- which on a black card renders
+        the logo perfectly, invisibly. It measured max luma 0 across the whole
+        strip. So set fill="currentColor" and let the card's colour token drive
+        it, rather than hardcoding a colour here.
+
+     Injected directly rather than via <use href="#bm">: a <use> pointing at an ID
+     that the fetch has not created yet does not reliably re-resolve.
+     ──────────────────────────────────────────────────────────────────────── -->
+<script>
+fetch('../logo/current/bonk-new-logo-white-svg.svg')
+  .then(r => r.text())
+  .then(txt => {
+    const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
+    const paths = [...doc.querySelectorAll('path')];
+    const fills = paths.map(p => (p.getAttribute('fill') || 'none').toLowerCase());
+    const counts = {};
+    fills.forEach(f => { counts[f] = (counts[f] || 0) + 1; });
+    const keep = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+    const glyphs = paths.filter((p, i) => fills[i] === keep);
+    document.querySelectorAll('.head svg').forEach(svg => {
+      svg.innerHTML = glyphs
+        .map(p => `<path d="${p.getAttribute('d')}" fill="currentColor"/>`)
+        .join('');
+    });
+    window.__markReady = glyphs.length;
+  })
+  .catch(e => { window.__markReady = 'failed: ' + e; });
+</script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — launch video: what we have</title>
+<style>
+  :root{ --gap:26px; }
+  body{ font-family: var(--app-font, system-ui); color:var(--foreground);
+        background:transparent; margin:0; padding:4px 2px 20px; line-height:1.5; }
+  h1{ font-size:26px; letter-spacing:-.02em; margin:0 0 6px; }
+  .sub{ color:var(--muted-foreground); font-size:14px; margin-bottom:30px; max-width:64ch; }
+  h2{ font-size:12px; letter-spacing:.13em; text-transform:uppercase;
+      color:var(--muted-foreground); margin:30px 0 4px; font-weight:600; }
+  .note{ font-size:13.5px; color:var(--muted-foreground); margin:0 0 14px; max-width:66ch; }
+  .row{ display:grid; grid-template-columns: 232px 1fr auto; gap:18px;
+        align-items:baseline; padding:11px 0; }
+  .row + .row{ box-shadow: inset 0 1px 0 var(--border); }
+  .fn{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
+       color:var(--foreground); word-break:break-all; }
+  .what{ font-size:14px; }
+  .tech{ color:var(--accent, var(--foreground)); font-style:italic; }
+  .use{ font-size:12.5px; color:var(--muted-foreground); margin-top:3px; }
+  .tag{ font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+        color:var(--muted-foreground); white-space:nowrap; padding-top:2px; }
+  .keep{ color:var(--foreground); font-weight:600; }
+  .cut{ opacity:.55; }
+  code{ font-family:ui-monospace,Menlo,monospace; font-size:12.5px;
+        color:var(--muted-foreground); }
+</style>
+</head>
+<body>
+
+<h1>the launch video — what exists, and what each thing is</h1>
+<p class="sub">You were being shown options to choose from. That was the wrong frame.
+These are <strong>shots</strong>, not competing ideas. A launch video is an assembly:
+one narrative spine, plus insertable texture between its beats. Nothing here needs
+your verdict — it needs an order.</p>
+
+<h2>1 · the spine — this is the launch video</h2>
+<p class="note">Your own script, built end to end. 30 seconds, vertical. This is the
+film; everything below is material to cut into it.</p>
+
+<div class="row">
+  <div class="fn">bonk-reel-30s-v3.mp4</div>
+  <div>
+    <div class="what">The full launch video.
+      <span class="tech">Technique: beat-cut typography on a 120 BPM grid.</span></div>
+    <div class="use">Problem (0–5s) → twist (5–10s) → four features, one bar each
+      (10–18s) → sign-off (18–25s) → URL + handle (25–30s)</div>
+  </div>
+  <div class="tag keep">use this</div>
+</div>
+
+<h2>2 · the shot library — cut these in between the beats</h2>
+<p class="note">Each is a self-contained loop or one-shot. In an editor you drop them
+between narrative lines as visual texture — the "breathe" moments. Pick by
+<em>where it goes</em>, not by which you like.</p>
+
+<div class="row">
+  <div class="fn">bonk-glow-v2.mp4</div>
+  <div>
+    <div class="what">The logo, dim on black, with a slow soft light drifting
+      <em>through</em> it — the light only exists inside the letterforms.
+      <span class="tech">Technique: additive light clipped to the mark.</span></div>
+    <div class="use">Best as the opening or closing beat. Calm, continuous, loops seamlessly.</div>
+  </div>
+  <div class="tag keep">best piece</div>
+</div>
+
+<div class="row">
+  <div class="fn">bonk-ripple-v2.mp4</div>
+  <div>
+    <div class="what">A solid disc grows from the centre while smaller circles multiply
+      outward from it.
+      <span class="tech">Technique: radial expansion + emerging satellites.</span></div>
+    <div class="use">Energy beat — under a music drop, or behind a feature callout.</div>
+  </div>
+  <div class="tag cut">19% static</div>
+</div>
+
+<div class="row">
+  <div class="fn">bonk-typeon-v3.mp4</div>
+  <div>
+    <div class="what">A line of text wipes on character by character, then resolves to
+      the logo. <span class="tech">Technique: per-glyph wipe-on reveal.</span></div>
+    <div class="use">For a spoken claim on screen. Rejected earlier — the type was a
+      fallback font and it sat still for a third of its length. Both fixed.</div>
+  </div>
+  <div class="tag cut">29% static</div>
+</div>
+
+<div class="row">
+  <div class="fn">bonk-dotcut-bonk-word-v3.gif</div>
+  <div>
+    <div class="what">The word BONK on a grid of circles, letters cycling through.
+      <span class="tech">Technique: circle grid with a letter morph cycle.</span></div>
+    <div class="use">Brand stamp / transition wipe.</div>
+  </div>
+  <div class="tag keep">keeper</div>
+</div>
+
+<div class="row">
+  <div class="fn">bonk-blueprint-v2-pastel-yellow(-retract).mp4</div>
+  <div>
+    <div class="what">The logo drawn as a technical blueprint — construction lines,
+      measurements, drafting marks. Pastel yellow register.
+      <span class="tech">Technique: line draw-on over construction geometry.</span></div>
+    <div class="use">The "how it's built" beat. Pairs with a claim about craft or open source.</div>
+  </div>
+  <div class="tag keep">keeper</div>
+</div>
+
+<div class="row">
+  <div class="fn">bonk-blueprint-v3-sup-teal-purple(-retract).mp4</div>
+  <div>
+    <div class="what">Same blueprint idea, but with the small <code>dj</code> set as a
+      superscript. Earthy teal / purple register.
+      <span class="tech">Technique: as above, superscript lockup.</span></div>
+    <div class="use">Alternative register for the same beat — use one, not both.</div>
+  </div>
+  <div class="tag">alt register</div>
+</div>
+
+<div class="row">
+  <div class="fn">bonk-motion-system-v3-newlogo.mp4</div>
+  <div>
+    <div class="what">A four-panel reference sheet: the mark, the wordmark, primitives
+      and type, all in motion at once.
+      <span class="tech">Technique: multi-panel system specimen.</span></div>
+    <div class="use">Not a shot — a style reference. Here so your editor knows the palette
+      and behaviour if they extend this.</div>
+  </div>
+  <div class="tag">reference</div>
+</div>
+
+<div class="row">
+  <div class="fn">bonk-blurreveal-v4-light-v5-30fps.gif</div>
+  <div>
+    <div class="what">A focus-pull reveal: the scene resolves from blur to sharp.
+      <span class="tech">Technique: blur-to-focus reveal, per scene.</span></div>
+    <div class="use">Soft transition between two beats. Six near-identical versions exist in
+      this folder — this is the sharpest and fastest.</div>
+  </div>
+  <div class="tag">pick one</div>
+</div>
+
+<h2>3 · stills — the carousel, same campaign</h2>
+<div class="row">
+  <div class="fn">bonk-carousel-1…5.png</div>
+  <div>
+    <div class="what">Five cards, 1080×1350, your slide copy verbatim, one italic accent
+      word per headline. <span class="tech">Static, not motion.</span></div>
+    <div class="use">Feed post. Can also be cut into the video as full-frame cards on a beat.</div>
+  </div>
+  <div class="tag keep">keeper</div>
+</div>
+
+<h2>4 · what I'd actually do next</h2>
+<p class="note">
+<strong>Split the spine into clips.</strong> Right now the 30 s reel is one flat file —
+you can't retime or reorder anything. Splitting it into 8 individual MP4s (hook, twist,
+four features, sign-off, end card) makes it editable: you drag them onto a timeline in
+CapCut / Premiere / Resolve, keep the order, and swap in shot-library pieces between
+them.<br><br>
+<strong>Then rename everything by role.</strong> <code>01-hook-problem.mp4</code>,
+<code>03-feature-bulk-edits.mp4</code>, <code>broll-logo-glow.mp4</code> — names that say
+what the clip <em>is in the edit</em>, so you never have to remember a version number
+again.<br><br>
+<strong>The one question I need from you:</strong> which editor? That decides the
+delivery format — cuts only (any editor), or a project file (Premiere / Resolve / Final
+Cut) with the clips already laid on a timeline at 120 BPM.
+</p>
+
+</body>
+</html>
