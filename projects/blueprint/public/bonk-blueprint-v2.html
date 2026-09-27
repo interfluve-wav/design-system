@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>bonk.dj — blueprint reveal v2</title>
+<style>
+  @font-face {
+    font-family: 'IBM Plex Mono Bonk';
+    src: url('./fonts/IBMPlexMono-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: block;
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono Bonk';
+    src: url('./fonts/IBMPlexMono-SemiBold.ttf') format('truetype');
+    font-weight: 600;
+    font-style: normal;
+    font-display: block;
+  }
+  /* ── THEME ────────────────────────────────────────────────────────────────
+     Colour lives HERE, not in the JS constants below. Those only carry the
+     fallback; applyTheme() copies these values in at boot, so a variant is a
+     variable change rather than a code edit.
+     Brand default (design.md): jet black ground, ONE orange accent. */
+  :root{
+    --ground:#000000;
+    /* v2 swaps the brand orange for pastel yellow. The glow is a variable now too:
+       v1 hardcoded its glow as a raw rgba literal inline in the canvas code, which is
+       exactly the kind of stray number that survives a palette change and turns up
+       still orange. That literal is gone; the colour comes from here. */
+    --accent:#f5e663;
+    --accent-soft:#fdf2ad;
+    --accent-glow:rgba(245,230,99,0.38);
+    --hair:rgba(255,255,255,0.30);
+    --hair-dim:rgba(255,255,255,0.16);
+    --hair-bright:rgba(255,255,255,0.62);
+    --label:rgba(255,255,255,0.44);
+  }
+  html, body { margin: 0; height: 100%; background: var(--ground); overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="./bonk-mark-v2.js"></script>
+<script src="./bonk-mark-font.js"></script>
+<script>
+/**
+ * bonk.dj — blueprint reveal, v2  (motion system part 1: construction -> mark)
+ *
+ * v2 differs from v1 in three ways, all of them measurement-honest:
+ *   1. the mark is LOWERCASE (bonk + a small dj) and comes from real geometry --
+ *      either the canonical SVG lockup (bonk-mark-v2.js) or "bonk" outlined from
+ *      Bonk-VF.ttf (bonk-mark-font.js). Nothing is traced from a raster, so there
+ *      is no IoU to report and none is claimed. ?mark=lockup|font switches.
+ *   2. the accent is pastel yellow, not the brand orange.
+ *   3. lowercase means the X-HEIGHT governs the mark, not a cap height. v1's left
+ *      dimension was labelled with the cap height while it measured the whole box;
+ *      on an uppercase mark those coincide to within a unit so it read true. On a
+ *      lowercase mark they differ by nearly 2x and it would have read as a lie.
+ *      That dimension is now labelled with the height it actually spans, and a
+ *      nested x-height dimension carries the metric that matters.
+ *
+ * Grammar borrowed from the reference reel: a primitive becomes construction
+ * geometry, the geometry is measured, and the measurement resolves into the
+ * finished mark. What is NOT borrowed: the reference annotates a typeface with a
+ * type-designer's placeholder figures; this annotates the real mark with its own
+ * measured numbers -- x-height, ascender, baseline, stroke, per-glyph column
+ * windows, ink profile. Nothing on screen is a decorative fake figure.
+ *
+ * House rules (bonk design.md): jet black canvas, ONE accent, mono hairlines, no
+ * gradients, no noise, subtle drift only. v2's accent is pastel yellow; v1 used
+ * the brand orange. Nothing else about the surface changes.
+ *
+ * Rendering is a pure function of time: renderAt(t) for t in [0, DURATION].
+ * The rAF loop calls it during preview; the capture harness calls __seek(t)
+ * so the exported GIF is frame-identical to playback.
+ */
+
+/* Colour comes from the CSS custom properties in :root — CSS is the source of
+   truth, and these are only the fallbacks. They're `let` and mirrored from CSS by
+   applyTheme() because getComputedStyle() is far too slow to call per frame. */
+let ACCENT       = '#f5e663';
+let ACCENT_SOFT  = '#fdf2ad';
+let ACCENT_GLOW  = 'rgba(245,230,99,0.38)';
+let HAIR         = 'rgba(255,255,255,0.30)';
+let HAIR_DIM     = 'rgba(255,255,255,0.16)';
+let HAIR_BRIGHT  = 'rgba(255,255,255,0.62)';
+let LABEL        = 'rgba(255,255,255,0.44)';
+let GROUND       = '#000000';
+
+function applyTheme(){
+  const cs = getComputedStyle(document.documentElement);
+  const g = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
+  ACCENT      = g('--accent',      ACCENT);
+  ACCENT_SOFT = g('--accent-soft', ACCENT_SOFT);
+  ACCENT_GLOW = g('--accent-glow', ACCENT_GLOW);
+  HAIR        = g('--hair',        HAIR);
+  HAIR_DIM    = g('--hair-dim',    HAIR_DIM);
+  HAIR_BRIGHT = g('--hair-bright', HAIR_BRIGHT);
+  LABEL       = g('--label',       LABEL);
+  GROUND      = g('--ground',      GROUND);
+}
+/* Re-reads the CSS variables AND repaints.
+   Re-reading alone is not enough: __seek() cancels the rAF loop, so without an
+   explicit renderAt() the canvas keeps its previous frame while __theme() happily
+   reports the new colour — the exact "reads correct, renders stale" failure this
+   hook exists to prevent. Verified: flipping without a redraw left orange
+   387,826 / green 0 (stale); with the redraw it became orange 0 / green 387,853. */
+function applyThemeAndRedraw(){
+  applyTheme();
+  renderAt(lastT);
+}
+window.__applyTheme = applyThemeAndRedraw;
+window.__theme = () => ({ ground: GROUND, accent: ACCENT, accentSoft: ACCENT_SOFT, accentGlow: ACCENT_GLOW });
+
+/* Safe to read here: the <style> block above is already applied, and the
+   synchronous renderAt() further down needs real values, not the fallbacks. */
+applyTheme();
+
+const DURATION = 8.0;
+
+/* ── easing ──────────────────────────────────────────────────────────────── */
+const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+const expoOut = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const cubicOut = (t) => 1 - Math.pow(1 - t, 3);
+const cubicInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const inOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+const lerp = (a, b, t) => a + (b - a) * t;
+/** progress within a [start, end] window, eased optionally */
+const win = (t, a, b) => clamp01((t - a) / (b - a));
+const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+
+/* ── timeline (seconds) ──────────────────────────────────────────────────── */
+/* Tightened after review: the opening spent ~2s near-empty, which read as a
+   stall rather than as restraint. Construction now starts at 0.35s. */
+const T = {
+  seedEnd: 0.70,
+  capLine: [0.35, 0.75],
+  baseLine: [0.42, 0.82],
+  cross: [0.55, 0.95],
+  letterRules: [0.70, 0.30],   // start, per-rule stagger
+  ruler: [0.95, 1.95],
+  dimTop: [1.25, 1.75],
+  dimLeft: [1.35, 1.85],
+  anchors: [1.50, 1.80],
+  labels: [1.25, 2.25],
+  dimsAway: [3.70, 4.60],      // guides retract as the push-in starts
+  trace: [1.95, 2.55],
+  resolve: [2.55, 0.30],       // start, per-letter duration
+  /* v1 had 4 letters at 0.09 stagger, landing the last one on T.beat (3.12).
+     v2 has 6: (3.12 - 2.55 - 0.30) / 5 = 0.054 keeps that landing. */
+  resolveStagger: 0.054,
+  rulesOut: [3.05, 3.70],      // construction rules leave once the mark is solid
+
+  /* Construction furniture that reads as lines OVER the finished artwork retracts as
+     the mark lands. The seeded ring, the centre cross and the centre circle used to sit
+     at partial alpha on top of the resolved mark for another ~2s (they carried only
+     guideAlpha, which is tied to dimsAway) -- seeded geometry that never leaves. Only
+     the LABELLED dimensions wait for dimsAway. */
+  furnitureOut: [3.10, 3.85],
+  beat: 3.12,                  // resolve completes here; held beat, then push
+  push: [3.60, 5.10],
+  waveform: [3.80, 5.10],
+  hold: [5.10, 6.70],
+  sweep: [6.70, 7.25],
+  fade: [7.00, 7.50],
+  seedReturn: 7.45,
+};
+
+/* ── state ───────────────────────────────────────────────────────────────── */
+/* Two real sources, same schema, so the renderer below is source-agnostic.
+   ?mark=font  swaps in "bonk" outlined from Bonk-VF.ttf. */
+const MARK_SOURCES = { lockup: window.BONK_MARK_V2, font: window.BONK_MARK_FONT };
+const MARK_KEY = (new URLSearchParams(location.search).get('mark') || 'lockup').toLowerCase();
+const MARK = MARK_SOURCES[MARK_KEY] || MARK_SOURCES.lockup;
+const PROVENANCE = {
+  lockup: ['SVG · CANONICAL LOCKUP', 'bonk + small dj'],
+  font:   ['BONK VARIABLE · wght 700', 'OUTLINED VIA FONTTOOLS'],
+};
+const PROV = PROVENANCE[MARK_KEY] || PROVENANCE.lockup;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W = 0, H = 0, dpr = 1;
+let ox = 0, oy = 0, s = 1;            // mark -> screen transform
+let markPath = null;                   // screen-space Path2D
+let outline = [];                      // [{points:[{x,y}], length}] screen space, ordered by x
+let totalOutline = 0;
+let letterU = [];                      // letter windows in screen px: {x0, x1}
+
+/* ── rebuild geometry for the current canvas size ────────────────────────── */
+function layout() {
+  W = window.innerWidth; H = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+
+  /* v1's budget was W*0.40, which is the BINDING constraint for any mark wider than
+     about 1.9:1 -- and v2's lowercase lockup is 2.39:1. On a 16:9 frame that produced
+     a 512x214 mark: a thin band with dead space above and below it. v1 never showed
+     this because its uppercase mark was 1.18:1 and therefore height-limited.
+     The budget now comes from the data block's position instead: the mark is centred
+     at W*0.455 and the block sits at W*0.845, so 2*(0.845-0.455-0.06) = 0.66 is the
+     widest it can go while keeping ~6% clearance. 0.62 sits inside that.
+     Marks that were already height-limited are unaffected. */
+  const targetW = Math.min(W * 0.62, (H * 0.60) * (MARK.width / MARK.height));
+  s = targetW / MARK.width;
+  const mh = MARK.height * s;
+  ox = W * 0.455 - targetW / 2;
+  oy = H * 0.50 - mh / 2;
+
+  /* v2 mark modules carry `origin` (the ink bbox's top-left in source units) because
+     their path data is NOT pre-normalised to 0,0 the way v1's traced mark was. Folding
+     it into the transform beats rewriting 5 KB of path data by hand. */
+  const org = MARK.origin || { x: 0, y: 0 };
+  const m = new DOMMatrix().translate(ox - org.x * s, oy - org.y * s).scale(s, s);
+  markPath = new Path2D();
+  markPath.addPath(new Path2D(MARK.d), m);
+
+  // split the compound path into subpaths so the contour can be traced in
+  outline = splitSubpaths(MARK.d).map((d) => samplePath(d, m)).filter((p) => p.length > 1);
+  outline.forEach((seg) => {
+    let len = 0;
+    for (let i = 1; i < seg.length; i++) len += Math.hypot(seg[i].x - seg[i - 1].x, seg[i].y - seg[i - 1].y);
+    seg.len = len;
+  });
+  outline.sort((a, b) => minX(a) - minX(b));
+  totalOutline = outline.reduce((n, seg) => n + seg.len, 0) || 1;
+
+  letterU = MARK.letters.map((l) => ({ x0: ox + l.x0 * s, x1: ox + l.x1 * s }));
+}
+
+const minX = (seg) => seg.reduce((v, p) => Math.min(v, p.x), Infinity);
+
+/** Split an absolute-only path string into one string per subpath. */
+function splitSubpaths(d) {
+  const out = [];
+  for (const part of d.split(/(?=M )/)) if (part.trim().startsWith('M')) out.push(part.trim());
+  return out;
+}
+
+/**
+ * Sample an SVG path into a polyline in screen space. We need real point
+ * sampling (not just stroke-dasharray) because the contour is drawn on
+ * progressively across subpaths, each with its own trim window.
+ */
+function samplePath(d, matrix) {
+  const svg = sampleSvg;
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', d);
+  svg.appendChild(p);
+  const total = p.getTotalLength();
+  const steps = Math.max(24, Math.round(total / 2.5));
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const pt = p.getPointAtLength((i / steps) * total);
+    const v = new DOMPoint(pt.x, pt.y).matrixTransform(matrix);
+    pts.push({ x: v.x, y: v.y });
+  }
+  p.remove();
+  return pts;
+}
+
+/* hidden SVG host used only for path measurement */
+const sampleSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+sampleSvg.setAttribute('width', '0');
+sampleSvg.setAttribute('height', '0');
+sampleSvg.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
+document.body.appendChild(sampleSvg);
+
+/* ── drawing helpers ─────────────────────────────────────────────────────── */
+function hair(x1, y1, x2, y2, color, w) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w || 1;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
+
+/** Horizontal rule that grows out from its centre (blueprint draw-on feel). */
+function hairCentre(y, x1, x2, p, color, w) {
+  const cx = (x1 + x2) / 2;
+  const h = ((x2 - x1) / 2) * expoOut(p);
+  hair(cx - h, y, cx + h, y, color, w);
+}
+
+function mono(size, weight) {
+  ctx.font = `${weight || 400} ${size}px 'IBM Plex Mono Bonk', ui-monospace, monospace`;
+}
+
+function text(str, x, y, color, size, align, weight) {
+  mono(size || 12, weight);
+  ctx.fillStyle = color;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(str, x, y);
+}
+
+/** Size that follows the frame so the composition survives other aspect ratios. */
+const u = (n) => n * (H / 1080);
+
+/* ── the scene ───────────────────────────────────────────────────────────── */
+let lastT = 0;              // so a theme change can repaint the current frame
+function renderAt(t) {
+  lastT = t;
+  const top = oy, bot = oy + MARK.height * s;
+  const left = ox, right = ox + MARK.width * s;
+  const { xHeight, ascender, baseline, strokeWidth, inkCoveragePct, letterCount } = normMetrics();
+  const mkCx = (left + right) / 2, mkCy = (top + bot) / 2;   // optical centre of the mark
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = GROUND;
+  ctx.fillRect(0, 0, W, H);
+
+  /* the push-in only affects the mark + its furniture, applied about the mark centre */
+  const pushP = win(t, T.push[0], T.push[1]);
+  let zoom = 1 + 0.032 * cubicInOut(pushP);
+  if (t > T.hold[0]) zoom = 1.032 + 0.004 * inOut(win(t, T.hold[0], T.hold[1]));
+
+  ctx.save();
+  ctx.translate(W * 0.455, H * 0.50);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-W * 0.455, -H * 0.50);
+
+  /* ── 1. the seed: one dot is the raw material ─────────────────────────── */
+  if (t < T.seedEnd) {
+    const p = win(t, 0, T.seedEnd);
+    const r = u(4) + u(5) * expoOut(p);
+    const ringR = u(30) + u(300) * expoOut(clamp01((t - 0.12) / 0.78));
+    ctx.globalAlpha = 0.32 * (1 - clamp01((t - 0.15) / 0.55));
+    ctx.strokeStyle = HAIR_BRIGHT;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(right, (top + bot) / 2, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ACCENT;
+    ctx.beginPath();
+    ctx.arc(mkCx, mkCy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* ── 2. construction draws on ─────────────────────────────────────────── */
+  const guidesOut = win(t, T.dimsAway[0], T.dimsAway[1]);      // 0 = present, 1 = retracted
+  const guideAlpha = 1 - guidesOut;
+  /* furniture retracts on the mark's landing, independently of the labelled dimensions */
+  const furnAlpha = 1 - win(t, T.furnitureOut[0], T.furnitureOut[1]);
+
+  if (t >= T.capLine[0]) {
+    ctx.globalAlpha = guideAlpha * furnAlpha;
+    hairCentre(top, left - u(42), right + u(42), win(t, T.capLine[0], T.capLine[1]), HAIR, 1);
+    hairCentre(bot, left - u(42), right + u(42), win(t, T.baseLine[0], T.baseLine[1]), HAIR, 1);
+    ctx.globalAlpha = 1;
+  }
+
+  if (t >= T.cross[0]) {
+    const p = expoOut(win(t, T.cross[0], T.cross[1]));
+    const cxm = (left + right) / 2, cym = (top + bot) / 2;
+    ctx.globalAlpha = 0.85 * guideAlpha * furnAlpha;
+    hair(cxm - u(52) * p, cym + 0.5, cxm + u(52) * p, cym + 0.5, HAIR_DIM, 1);
+    hair(cxm + 0.5, cym - u(52) * p, cxm + 0.5, cym + u(52) * p, HAIR_DIM, 1);
+    ctx.globalAlpha = 1;
+    // centre circle: the geometric primitive the mark is derived from
+    const rp = expoOut(win(t, T.cross[0] + 0.08, T.cross[1] + 0.10));
+    ctx.globalAlpha = 0.5 * guideAlpha * furnAlpha;
+    ctx.strokeStyle = HAIR;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cxm, cym, u(44) * rp, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // vertical rules at every measured letter window edge. These fade out once
+  // the mark resolves: measured on captured frames, left running they put
+  // ~12k px of grey inside the finished mark's box — construction lines
+  // reading as lines through the artwork.
+  const rulesOut = win(t, T.rulesOut[0], T.rulesOut[1]);
+  const ruleAlpha = (1 - 0.82 * guidesOut) * (1 - rulesOut);
+  MARK.letters.forEach((l, i) => {
+    const st = T.letterRules[0] + i * T.letterRules[1];
+    const p = win(t, st, st + 0.34);
+    if (p <= 0 || ruleAlpha < 0.01) return;
+    const e = expoOut(p);
+    const h = (MARK.height / 2 + u(26)) * s * e;
+    const cym = (top + bot) / 2;
+    [l.x0, l.x1].forEach((ux) => {
+      const x = ox + ux * s;
+      ctx.globalAlpha = 0.5 * ruleAlpha;
+      hair(Math.round(x) + 0.5, cym - h, Math.round(x) + 0.5, cym + h, HAIR_DIM, 1);
+    });
+    ctx.globalAlpha = 1;
+  });
+
+  // corner anchor handles — the mark registered on the grid
+  if (t >= T.anchors[0]) {
+    const p = expoOut(win(t, T.anchors[0], T.anchors[1]));
+    ctx.globalAlpha = guideAlpha;
+    const hh = u(3.4) * p;
+    [[left, top], [right, top], [left, bot], [right, bot]].forEach(([x, y]) => {
+      ctx.fillStyle = guidesOut > 0.5 ? LABEL : ACCENT;
+      ctx.fillRect(x - hh, y - hh, hh * 2, hh * 2);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── 3. ruler + ink profile row (the mark's own histogram) ────────────── */
+  const rulerY = bot + u(30);
+  const waveP = win(t, T.waveform[0], T.waveform[1]);
+  if (t >= T.ruler[0]) {
+    const unitStep = 10, tall = 50;
+    for (let ux = 0; ux <= MARK.width; ux += unitStep) {
+      const p = expoOut(win(t, T.ruler[0] + (ux / MARK.width) * (T.ruler[1] - T.ruler[0]) * 0.55, T.ruler[1]));
+      if (p <= 0) continue;
+      const isTall = ux % tall === 0;
+      const x = Math.round(ox + ux * s) + 0.5;
+      const tickH = u(isTall ? 9 : 5) * p;
+
+      // morph the ticks into a bar row shaped by the mark's real ink profile
+      const bucket = Math.min(MARK.profile.length - 1, Math.round((ux / MARK.width) * (MARK.profile.length - 1)));
+      const barH = u(6 + MARK.profile[bucket] * 58) * p;
+      const h = lerp(tickH, barH, waveP);
+
+      ctx.globalAlpha = lerp(0.5, 0.9, waveP) * (1 - 0.6 * guidesOut);
+      hair(x, rulerY, x, rulerY + h, isTall ? HAIR_BRIGHT : HAIR, 1);
+    }
+    ctx.globalAlpha = 1;
+
+    // unit numbers fade out as the row becomes a profile
+    if (waveP < 0.6) {
+      const a = (1 - waveP / 0.6) * guideAlpha;
+      ctx.globalAlpha = a;
+      for (let ux = 0; ux <= MARK.width; ux += tall) {
+        text(String(ux), ox + ux * s, rulerY + u(24), LABEL, u(11), ux === 0 ? 'left' : 'center');
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* ── 4. dimensions: the mark is measured ──────────────────────────────── */
+  const dimAlpha = guideAlpha;   // dimensions retract with the rest of the guides
+  if (t >= T.dimTop[0]) {
+    const p = win(t, T.dimTop[0], T.dimTop[1]);
+    const a = dimAlpha;
+    const e = expoOut(p);
+    const y = top - u(64);
+    const half = (MARK.width * s * e) / 2;
+    const cxm = (left + right) / 2;
+    ctx.globalAlpha = a;
+    hair(cxm - half, y + 0.5, cxm + half, y + 0.5, HAIR, 1);
+    [-half, half].forEach((dx) => hair(cxm + dx + 0.5, y - u(7), cxm + dx + 0.5, y + u(7), HAIR, 1));
+    if (p > 0.85) {
+      ctx.globalAlpha = a * clamp01((p - 0.85) / 0.15);
+      text(fmt(MARK.width), cxm, y - u(12), ACCENT_SOFT, u(13), 'center', 600);
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (t >= T.dimLeft[0]) {
+    const p = win(t, T.dimLeft[0], T.dimLeft[1]);
+    const a = dimAlpha;
+    const e = expoOut(p);
+    const x = left - u(64);
+    const half = (MARK.height * s * e) / 2;
+    const cym = (top + bot) / 2;
+    ctx.globalAlpha = a;
+    hair(x + 0.5, cym - half, x + 0.5, cym + half, HAIR, 1);
+    [-half, half].forEach((dy) => hair(x - u(7), cym + dy + 0.5, x + u(7), cym + dy + 0.5, HAIR, 1));
+    if (p > 0.85) {
+      ctx.globalAlpha = a * clamp01((p - 0.85) / 0.15);
+      ctx.save();
+      ctx.translate(x - u(14), cym);
+      ctx.rotate(-Math.PI / 2);
+      /* labelled with the height it actually spans (ascender top to j descender),
+         not the cap height. On v1's uppercase mark those matched to within 1 unit. */
+      text(fmt(MARK.height), 0, 0, ACCENT_SOFT, u(13), 'center', 600);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* Nested x-height dimension: the metric that actually governs a lowercase mark.
+     Sits inside the left cap line so the two verticals read as a pair -- the outer
+     measuring the box, the inner measuring the letters. */
+  if (t >= T.dimLeft[0] + 0.25 && guidesOut < 0.9) {
+    const p = expoOut(win(t, T.dimLeft[0] + 0.25, T.dimLeft[1] + 0.25));
+    const x = left - u(24);
+    const yb = top + baseline * s;
+    const yx = yb - xHeight * s;
+    ctx.globalAlpha = guideAlpha;
+    hair(x + 0.5, yx, x + 0.5, yb, ACCENT_SOFT, 1);
+    [0, 1].forEach((k) => {
+      const y = k ? yb : yx;
+      hair(x - u(6), y + 0.5, x + u(6), y + 0.5, ACCENT_SOFT, 1);
+    });
+    if (p > 0.85) {
+      ctx.globalAlpha = guideAlpha * clamp01((p - 0.85) / 0.15);
+      text(fmt(xHeight), x - u(11), (yb + yx) / 2, ACCENT_SOFT, u(12), 'right', 600);
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // stroke-width dimension across the first stem
+  if (t >= T.labels[0] + 0.3 && guidesOut < 0.9) {
+    const y = bot + u(96) * (1 - guideAlpha) + u(86);
+    const x0 = ox, x1 = ox + strokeWidth * s;
+    ctx.globalAlpha = guideAlpha;
+    hair(x0 + 0.5, y - u(7), x0 + 0.5, y + u(7), HAIR, 1);
+    hair(x1 + 0.5, y - u(7), x1 + 0.5, y + u(7), HAIR, 1);
+    hair(x0, y + 0.5, x1, y + 0.5, HAIR, 1);
+    text(fmt(strokeWidth), (x0 + x1) / 2, y + u(20), ACCENT_SOFT, u(12), 'center', 600);
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── 5. the mark: hairline blueprint state, traced on, then filled ────── */
+  const traceP = win(t, T.trace[0], T.trace[1]);
+
+  // per-letter resolve progress (each letter wipes left -> right)
+  const perLetter = MARK.letters.map((l, i) => {
+    const st = T.resolve[0] + i * T.resolveStagger;
+    return cubicOut(win(t, st, st + T.resolve[1]));
+  });
+  const anyResolving = perLetter.some((p) => p > 0);
+
+  if (t >= T.trace[0] && t < T.sweep[1]) {
+    // The mark's own alpha tracks only the outro fade. (It used to also carry
+    // the guide-retraction factor, which quietly dimmed the finished mark to
+    // 65% right when it should be at full strength.)
+    const fadeOut = win(t, T.fade[0], T.fade[1]);
+    ctx.globalAlpha = 1 - fadeOut;
+
+    // (a) the fill, clipped per letter so each window fills in sequence
+    if (anyResolving) {
+      ctx.save();
+      ctx.beginPath();
+      letterU.forEach((w, i) => {
+        const p = perLetter[i];
+        if (p <= 0) return;
+        ctx.rect(w.x0, top - u(40), (w.x1 - w.x0) * p, (bot - top) + u(80));
+      });
+      ctx.clip();
+      ctx.fillStyle = ACCENT;
+      ctx.shadowColor = ACCENT_GLOW;
+      ctx.shadowBlur = u(28) * clamp01((t - T.beat) / 1.2);
+      ctx.fill(markPath);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // (b) the contour: traced on progressively, then left ahead of each fill front
+    ctx.strokeStyle = HAIR_BRIGHT;
+    ctx.lineWidth = 1.4;
+    let cum = 0;
+    outline.forEach((seg) => {
+      const share = seg.len / totalOutline;
+      const segStart = (cum / totalOutline) * 0.85;
+      cum += seg.len;
+      const local = clamp01((traceP - segStart) / Math.max(0.08, share));
+      if (local <= 0) return;
+      const segLeft = minX(seg);
+      const segRight = Math.max(...seg.map((p) => p.x));
+      // hide the contour where its letter is already filled
+      const letterIdx = letterU.findIndex((w) => segLeft >= w.x0 - 2 && segRight <= w.x1 + 2);
+      const fillP = letterIdx >= 0 ? perLetter[letterIdx] : 0;
+      const front = letterIdx >= 0 ? lerp(letterU[letterIdx].x0, letterU[letterIdx].x1, fillP) : Infinity;
+      strokePartial(seg, local, front);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // leading edge of each active wipe: a bright hairline at the fill front
+  letterU.forEach((w, i) => {
+    const p = perLetter[i];
+    if (p <= 0.001 || p >= 0.999) return;
+    const x = Math.round(lerp(w.x0, w.x1, p)) + 0.5;
+    ctx.globalAlpha = 0.9 * (1 - win(t, T.sweep[0], T.sweep[1]));
+    hair(x, top - u(16), x, bot + u(16), ACCENT_SOFT, 1);
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore(); // end push-in transform
+
+  /* ── 6. data block — the measurements are the point ───────────────────── */
+  const blockX = W * 0.845;
+  const blockY = H * 0.255;
+  const blockA = win(t, T.labels[0], T.labels[1]) * (1 - win(t, T.sweep[0], T.sweep[1]));
+  if (blockA > 0.01) {
+    const rows = [
+      ['bonk.dj / WORDMARK', ACCENT, 13, 600],
+      [PROV[0], LABEL, 11, 400],
+      [PROV[1], LABEL, 11, 400],
+      ['', null, 0, 0],
+      [`W ${fmt(MARK.width)}`, null, 12, 400],
+      [`H ${fmt(MARK.height)}`, null, 12, 400],
+      [`X-HEIGHT ${fmt(xHeight)}`, null, 12, 400],
+      [`ASCENDER ${fmt(ascender)}`, null, 12, 400],
+      [`STROKE ${fmt(strokeWidth)}`, null, 12, 400],
+      [`INK ${inkCoveragePct.toFixed(1)}%`, null, 12, 400],
+      [`GLYPHS ${letterCount}`, null, 12, 400],
+      ['', null, 0, 0],
+    ];
+    ctx.globalAlpha = blockA;
+    let y = blockY;
+    rows.forEach(([str, col, size, wt]) => {
+      if (str) text(str, blockX, y, col || 'rgba(255,255,255,0.72)', u(size), 'left', wt);
+      y += u(size + 10);
+    });
+
+    // per-letter column windows, revealed in sequence with the fill
+    y += u(8);
+    MARK.letters.forEach((l, i) => {
+      const p = clamp01((t - (T.labels[0] + 0.35 + i * 0.12)) / 0.4);
+      if (p <= 0) return;
+      const size = u(11);
+      y += u(19);
+      ctx.globalAlpha = blockA * p;
+      ctx.fillStyle = perLetter[i] > 0.5 ? ACCENT : LABEL;
+      ctx.fillRect(blockX, y - size, u(4) * p, u(6));
+      text(`0${i + 1}`, blockX + u(12), y, 'rgba(255,255,255,0.55)', size);
+      text(`${fmt(l.w)}`, blockX + u(52), y, perLetter[i] > 0.5 ? ACCENT_SOFT : 'rgba(255,255,255,0.72)', size);
+      const barW = u(120) * (l.w / Math.max(...MARK.letters.map((q) => q.w)));
+      ctx.globalAlpha = blockA * p * 0.5;
+      hair(blockX + u(96), y - size * 0.35, blockX + u(96) + barW * p, y - size * 0.35, HAIR_BRIGHT, 1);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── 7. outro: sweep erases, the dot returns (seamless loop) ──────────── */
+  if (t >= T.sweep[0]) {
+    const p = cubicOut(win(t, T.sweep[0], T.sweep[1]));
+    const x = Math.round(lerp(left - u(60), right + u(60), p)) + 0.5;
+    ctx.globalAlpha = 0.9 * (1 - clamp01((p - 0.85) / 0.15));
+    hair(x, top - u(60), x, bot + u(70), ACCENT_SOFT, 1);
+    ctx.globalAlpha = 1;
+  }
+  if (t >= T.seedReturn) {
+    const p = win(t, T.seedReturn, DURATION);
+    const r = u(4) + u(5) * expoOut(p);
+    ctx.fillStyle = ACCENT;
+    ctx.beginPath();
+    ctx.arc(mkCx, mkCy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (DEBUG) {
+    text(`t=${t.toFixed(2)}  zoom=${zoom.toFixed(3)}  trace=${traceP.toFixed(2)}`, u(18), u(32), 'rgba(0,255,133,0.8)', u(14));
+  }
+}
+
+/** Draw the first `p` fraction of a polyline, skipping anything left of `front`. */
+function strokePartial(seg, p, front) {
+  const target = seg.len * p;
+  ctx.beginPath();
+  let acc = 0;
+  let started = false;
+  for (let i = 0; i < seg.length; i++) {
+    const pt = seg[i];
+    if (i > 0) acc += Math.hypot(pt.x - seg[i - 1].x, pt.y - seg[i - 1].y);
+    if (acc > target) break;
+    if (pt.x < front) { started = false; continue; }   // filled region: no contour
+    if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
+    else ctx.lineTo(pt.x, pt.y);
+  }
+  ctx.stroke();
+}
+
+const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
+
+/** MARK.metrics is in mark units already; keep one accessor for clarity. */
+function normMetrics() {
+  /* Lowercase: the governing vertical metric is the x-height. `ascender` and
+     `baseline` come along so the vertical dimensions can be drawn honestly --
+     ascenders overshoot the x-height and the j descends below the baseline, so
+     the box height is NOT the x-height and must not be labelled as one. */
+  const met = MARK.metrics;
+  return {
+    xHeight: met.xHeight,
+    ascender: met.ascender,
+    baseline: met.baseline != null ? met.baseline : met.ascender,
+    strokeWidth: met.stemWidth,
+    inkCoveragePct: met.inkCoveragePct,
+    letterCount: met.letterCount,
+  };
+}
+
+/* ── runtime ─────────────────────────────────────────────────────────────── */
+const DEBUG = new URLSearchParams(location.search).has('debug');
+const params = new URLSearchParams(location.search);
+let fixedT = params.has('t') ? parseFloat(params.get('t')) : null;
+
+layout();
+window.addEventListener('resize', () => { layout(); if (fixedT !== null) renderAt(fixedT); });
+
+window.__seek = (t) => {
+  // Stop the preview loop first: otherwise rAF keeps drawing its own clock
+  // between the seek and the screenshot, and captures come out as a mix of
+  // seeked and live frames.
+  fixedT = t;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+  renderAt(t);
+};
+window.__duration = DURATION;
+/* Resolved config, so a variant can be ASSERTED rather than eyeballed: a ?mark=
+   switch that silently fell back, or a palette that failed to apply, still renders
+   a valid-looking reel. Check the resolved numbers, not the source. */
+window.__config = () => ({
+  markKey: MARK_KEY, markSource: MARK.source,
+  markW: MARK.width, markH: MARK.height, origin: MARK.origin,
+  glyphs: MARK.letters.length, metrics: MARK.metrics,
+  accent: ACCENT, accentSoft: ACCENT_SOFT, accentGlow: ACCENT_GLOW, ground: GROUND,
+  duration: DURATION,
+});
+window.__ready = (async () => {
+  try { await document.fonts.load("400 12px 'IBM Plex Mono Bonk'"); } catch (e) { /* fall back to system mono */ }
+  try { await document.fonts.load("600 12px 'IBM Plex Mono Bonk'"); } catch (e) { /* ditto */ }
+  await document.fonts.ready;
+  if (fixedT !== null) renderAt(fixedT);
+  return true;
+})();
+
+let rafId = 0;
+if (fixedT === null) {
+  const t0 = performance.now();
+  const loop = (now) => {
+    const t = ((now - t0) / 1000) % DURATION;
+    renderAt(t);
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
+} else {
+  renderAt(fixedT);
+}
+</script>
+</body>
+</html>

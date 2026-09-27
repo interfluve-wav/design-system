@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BONK DJ · V4 · Blur-reveal reel — all 4 scenes (CSS-themeable)</title>
+<style>
+  @font-face {
+    font-family: 'PlexMono Bonk';
+    src: url('../../blueprint/public/fonts/IBMPlexMono-Regular.ttf') format('truetype');
+    font-weight: 400; font-display: block;
+  }
+  @font-face {
+    font-family: 'PlexMono Bonk';
+    src: url('../../blueprint/public/fonts/IBMPlexMono-SemiBold.ttf') format('truetype');
+    font-weight: 600; font-display: block;
+  }
+  /* ── THEME ─────────────────────────────────────────────────────────────────
+     Every colour in the reel resolves from these. The scene text is rasterised
+     into a WebGL texture, so CSS cannot reach it on its own — JS reads these
+     variables at texture-build time instead, keeping ONE source of truth.
+     Change a variable and call window.__rebuild(); no code edit needed.
+     Per-load overrides: ?accent=%2300ff85&ink=%23000&ground=%23ffffff
+     Brand default (design.md): jet black ground, white ink, a single orange. */
+  :root{
+    --ground:#000000;
+    --ink:#ffffff;
+    --accent:#ff6b1a;
+    --label:rgba(255,255,255,0.44);
+    --label-dim:rgba(255,255,255,0.30);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    width:100%;height:100%;
+    background:var(--ground);
+    color:var(--ink);
+    font-family:'PlexMono Bonk','IBM Plex Mono',ui-monospace,monospace;
+    overflow:hidden;
+  }
+  #stage{position:relative;width:100%;height:100%;background:var(--ground)}
+  #glcanvas{position:absolute;inset:0;width:100%;height:100%}
+
+  /* chrome: plain colour on the ground — v1 used mix-blend-mode:difference,
+     which inverts to off-brand hues the moment the ground isn't black. */
+  .mark{
+    position:absolute;top:20px;left:26px;z-index:5;
+    display:flex;align-items:center;gap:10px;
+    font-weight:600;letter-spacing:0.22em;font-size:12px;color:var(--ink);
+  }
+  .mark .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--accent);box-shadow:0 0 14px var(--accent);
+  }
+  .badge{position:absolute;top:22px;right:26px;z-index:5;font-size:11px;letter-spacing:0.2em;color:var(--label)}
+  .num{
+    position:absolute;bottom:22px;right:26px;z-index:5;font-size:11px;letter-spacing:0.2em;
+    color:var(--label);font-variant-numeric:tabular-nums;
+  }
+  .num b{color:var(--accent);font-weight:600}
+  .cut{position:absolute;bottom:22px;left:26px;z-index:5;font-size:11px;letter-spacing:0.2em;color:var(--label-dim)}
+
+  @media (prefers-reduced-motion: reduce){ #glcanvas{opacity:0.999} }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="glcanvas"></canvas>
+    <div class="mark"><span class="dot"></span><span>BONK</span></div>
+    <div class="badge">V2 · BLUR-REVEAL</div>
+    <div class="cut" id="cut">CUT · DIAGONAL</div>
+    <div class="num"><b id="num">01</b> / 03</div>
+  </div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   BONK DJ — blur-reveal reel, v2
+
+   What v1 got wrong, and what changed:
+
+   1. PALETTE. Every one of v1's ten hex values was off-brand — teal #0b3d3a,
+      coral #ff4d4d, violet #1b1440, pink #ff006e, and a #0a0014 stage. design.md
+      says "the brand orange is the only colour on a brand surface": jet black,
+      white text, #ff6b1a. All of it is now black/white/orange. The type is the
+      brand mono (IBM Plex Mono), not SF Mono.
+
+   2. ANIMATION. v1's blur band was +-0.06 in UV with max blur 3 texels — so the
+      "blur" barely existed and the edge arrived almost hard, which is the abrupt
+      texture that got vetoed. v2 uses a wide progressive falloff (blur peaks at
+      the reveal front and resolves to sharp behind it) with an ANISOTROPIC blur
+      stretched along the direction of travel, so the reveal smears rather than
+      cuts. Plus a slow push-in so the frame breathes.
+
+   3. CUTS. v1 had exactly one transition: the same diagonal wipe, three times.
+      v2 runs three members of one family — diagonal wipe, vertical wipe, and a
+      radial-free blur dissolve — all sharing the same blur falloff, so they read
+      as one language with variety instead of one move on repeat. Still simple:
+      no spirals, no noise, no edge wobble.
+
+   4. Dead code removed: uEdge / uSeed / uTime were uploaded but never read, and
+      noise()/fbm() were defined and never called.
+
+   Rendering is a pure function of time, renderAt(t), so __seek(t) makes the
+   captured GIF frame-identical to playback.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const FONTS = `'PlexMono Bonk', 'IBM Plex Mono', ui-monospace, monospace`;
+/* ── theme ──────────────────────────────────────────────────────────────────
+   Colour comes from the CSS custom properties above, NOT from constants here.
+   The scene text is rasterised into a WebGL texture, so CSS can't reach it by
+   itself; JS reads the variables at texture-build time and re-reads them on
+   __rebuild(). One source of truth for colour, in CSS, where a designer looks. */
+const theme = { ground:'#000000', ink:'#ffffff', accent:'#ff6b1a', groundRgb:[0,0,0] };
+
+function readTheme(){
+  const cs = getComputedStyle(document.documentElement);
+  const q  = new URLSearchParams(location.search);
+  /* query param wins, so a variant can be previewed without editing anything */
+  const pick = (param, cssVar, fallback) =>
+    (q.get(param) || cs.getPropertyValue(cssVar).trim() || fallback);
+
+  theme.ground = pick('ground', '--ground', '#000000');
+  theme.ink    = pick('ink',    '--ink',    '#ffffff');
+  theme.accent = pick('accent', '--accent', '#ff6b1a');
+  theme.groundRgb = toRgb01(theme.ground);   // cached: clearColor runs every frame
+}
+
+/** '#fff' | '#ffffff' | 'rgb(1,2,3)' -> [r,g,b] floats in 0..1 */
+function toRgb01(c){
+  const s = (c || '').trim();
+  if (s.startsWith('#')){
+    let h = s.slice(1);
+    if (h.length === 3) h = h.split('').map((ch) => ch + ch).join('');
+    return [parseInt(h.slice(0,2),16)/255, parseInt(h.slice(2,4),16)/255, parseInt(h.slice(4,6),16)/255];
+  }
+  const m = s.match(/([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
+  return m ? [ +m[1]/255, +m[2]/255, +m[3]/255 ] : [0,0,0];
+}
+
+const MAX_BLUR = 22;        // texels at the reveal front
+const ZOOM_END = 1.05;      // push-in across the WHOLE reel (not per scene)
+
+/* ── copy: the whole reel, scene by scene ─────────────────────────────────
+   Scene 1 = the metadata pain · 2 = the pitch · 3 = what it does · 4 = the beta
+   call. Each *line* becomes one blur-reveal block, and an `a: true` token is the
+   accent phrase the reveal resolves out of blur last, so every cut has something
+   to give away.
+
+   Holds are DERIVED from line length, not hand-tuned: long copy gets the time it
+   needs and short lines don't stall the reel. Hand-tuning thirteen of them would
+   drift the moment any copy changes. */
+const SCENE_COPY = [
+  [ /* 1 · the metadata pain */
+    [{ t: 'Rekordbox metadata is a ', a: false }, { t: 'mess.', a: true }],
+    [{ t: 'Duplicate rows. Broken cues. ', a: false }, { t: 'XML export hell.', a: true }],
+    [{ t: 'Staring at a corrupted library hours before a gig \u2014 ', a: false },
+     { t: "we've all been there.", a: true }],
+  ],
+  [ /* 2 · the pitch */
+    [{ t: 'It\u2019s about time we managed things ', a: false }, { t: 'smarter & faster.', a: true }],
+    [{ t: 'Meet ', a: false }, { t: 'Bonk DJ.', a: true }],
+    [{ t: "Bonk's designed to handle the annoying stuff, ", a: false },
+     { t: 'so you can focus on the important part \u2014 Music!', a: true }],
+  ],
+  [ /* 3 · what it does */
+    [{ t: 'Read and write directly to your ', a: false }, { t: 'Rekordbox.db', a: true }],
+    [{ t: 'no more XML round-trips or sync errors ', a: false },
+     { t: "(unless that's what you're into).", a: true }],
+    [{ t: 'Bulk edit tags across your entire library. ', a: false },
+     { t: 'Genres & Comments? Handled.', a: true }],
+  ],
+  [ /* 4 · the beta call */
+    [{ t: 'Beta Live Now.', a: true }],
+    [{ t: 'Help us test and work towards a smarter, ', a: false },
+     { t: 'less painful way to do what we love doing.', a: true }],
+    [{ t: 'Get started: ', a: false }, { t: 'bonkmusic.app', a: true }],
+  ],
+];
+
+const CUTS = ['DIAGONAL', 'VERTICAL', 'BLUR DISSOLVE'];
+
+/* ?scene=2 isolates one scene for review or capture. Absent (or 0) = full reel. */
+const wantScene = parseInt(new URLSearchParams(location.search).get('scene') || '0', 10);
+
+const SCENES = [];
+SCENE_COPY.forEach((lines, si) => {
+  if (wantScene && wantScene !== si + 1) return;
+  lines.forEach((segs) => {
+    const len = segs.reduce((n, s) => n + s.t.length, 0);
+    SCENES.push({
+      segs, scene: si + 1,
+      /* ~15 ms per character, floored so short lines still land and capped so a
+         long line doesn't hold the whole reel up */
+      hold: Math.round(Math.min(1500, Math.max(620, len * 15))),
+    });
+  });
+});
+/* the cut style cycles across the blocks so a scene never repeats one cut */
+SCENES.forEach((s, i) => { s.cut = i % CUTS.length; s.cutName = CUTS[s.cut]; });
+const SCENE_COUNT = SCENE_COPY.length;
+
+/* ONE shared crossover length for IN, OUT and OVERLAP.
+
+   If those three differ, scene B's resolve-in does not line up with scene A's
+   blur-out. Measured on v2 they were offset by `OUT - OVERLAP` = 120ms, so the
+   handoff arrived late and each cut read as two separate events rather than one
+   transition. Aligning them makes the crossover a single window in which blur is
+   conserved — exactly what A gains on the way out, B loses on the way in. */
+const XFADE = 420;          // ms — the crossover window, shared by all three
+const IN = XFADE;
+const OUT = XFADE;
+const OVERLAP = XFADE;
+
+let acc = 0;
+SCENES.forEach((s) => {
+  s.start = acc;
+  s.slot = IN + s.hold + OUT;
+  acc += s.slot - OVERLAP;
+});
+/* TOTAL is deliberately SHORTER than the final scene's window, so the last
+   blur-out wraps and overlaps the first scene's resolve-in. Without that, the
+   loop seam has exactly the dead beat we just removed from the internal cuts. */
+const TOTAL = acc;
+
+/* ── easing ─────────────────────────────────────────────────────────────── */
+const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+/* easeOut / easeInOut were removed here: after the crossfade rewrite nothing
+   called them. Dead easing helpers are how two "different" curves quietly end up
+   driving opposite sides of the same transition again. */
+const win = (t, a, b) => clamp01((t - a) / (b - a));
+/* smootherstep — zero first AND second derivative at both ends, so a crossfade
+   built on it has no visible kick as it leaves or lands. cubic ease-out has a
+   velocity step at t=1, which is what makes a handoff feel like a bump. */
+const smoother = (t) => { const x = clamp01(t); return x * x * x * (x * (x * 6 - 15) + 10); };
+
+/* Crossfade curve — deliberately NOT smootherstep.
+   A crossfade's composite is  a*A + (1-a)*B,  so its rate of change is
+   |a'| * |A - B|. The disruptive moment is the middle, where two *different*
+   texts are both on screen and |A - B| is at its largest. smootherstep puts its
+   peak velocity (1.875) exactly there, which maximises the visible jump.
+   Measured: swapping to smootherstep cut the mean frame delta 13% but left
+   spikiness at 8.2 — the spike was structural, not a lack of smoothing.
+
+   This is a trapezoid velocity profile instead: ease in over 18%, hold constant
+   through the middle, ease out over the last 18%. Peak velocity is 1.22 rather
+   than 1.875 (−35%), velocity is still continuous at every join so nothing kicks,
+   and the ends are gentle where the blend is most visible. */
+const xfade = (t) => {
+  const x = clamp01(t), e = 0.18, peak = 1 / (1 - e);
+  if (x < e) return peak * x * x / (2 * e);
+  if (x > 1 - e) { const y = 1 - x; return 1 - peak * y * y / (2 * e); }
+  return peak * (e / 2) + peak * (x - e);
+};
+
+/* Blur curve: reaches FULL blur by the crossover midpoint and then holds.
+   With a linear ramp both scenes sit at half blur when they're both at 50%
+   alpha — i.e. two still-readable texts superimposed, which is what the residual
+   spike is made of. Peaking the blur exactly where the overlap is greatest means
+   the disruptive moment is two heavy smears blending, not two texts fighting.
+   Velocity is zero at the start, so the blur doesn't kick in abruptly. */
+const blurCurve = (t) => smoother(clamp01(clamp01(t) * 2));
+
+/* ── shader ─────────────────────────────────────────────────────────────── */
+const VERT = `
+attribute vec2 aPosition;
+attribute vec2 aUV;
+varying vec2 vUV;
+void main(){ vUV = aUV; gl_Position = vec4(aPosition, 0.0, 1.0); }
+`;
+
+const FRAG = `
+precision highp float;
+uniform sampler2D uTex;
+uniform vec2  uTexel;
+uniform float uProgress;    // reveal-front travel, 0..1 (also dissolve progress)
+uniform float uMaxBlur;     // texels
+uniform float uGlobalBlur;  // extra blur, used by the exit
+uniform float uAlpha;
+uniform float uAspect;
+uniform float uMode;        // 0 diagonal, 1 vertical, 2 dissolve
+uniform float uZoom;        // push-in
+varying vec2 vUV;
+
+/* Anisotropic Gaussian: weighted taps stretched ALONG dir, so the smear follows
+   the direction of travel instead of blooming evenly. This is what makes the
+   reveal flow rather than look like an abrupt texture. */
+vec4 blurDir(vec2 uv, float radius, vec2 dir){
+  if (radius < 0.45) return texture2D(uTex, uv);
+  vec2 r = uTexel * radius;
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec4 sum = texture2D(uTex, uv) * 1.8;
+  float wsum = 1.8;
+  for (int i = 1; i <= 6; i++){
+    float f = float(i) / 6.0;
+    float w = 1.0 - 0.62 * f;                 // Gaussian-ish falloff
+    sum += texture2D(uTex, uv + dir  * r * f) * w;              wsum += w;
+    sum += texture2D(uTex, uv - dir  * r * f) * w;              wsum += w;
+    sum += texture2D(uTex, uv + perp * r * f * 0.34) * w * 0.5; wsum += w * 0.5;
+    sum += texture2D(uTex, uv - perp * r * f * 0.34) * w * 0.5; wsum += w * 0.5;
+  }
+  return sum / wsum;
+}
+
+void main(){
+  /* push-in about the frame centre */
+  vec2 uv = (vUV - 0.5) / uZoom + 0.5;
+
+  /* aspect-normalised coordinate along the wipe axis, so a "45 degree" wipe is
+     actually 45 degrees on screen at any window shape */
+  vec2 rc = uv * vec2(uAspect, 1.0);
+  vec2 dir;
+  float m;
+  if (uMode < 0.5)      { m = (rc.x + rc.y) / (uAspect + 1.0); dir = normalize(vec2(1.0, 1.0)); }
+  else if (uMode < 1.5) { m = uv.y;                            dir = vec2(0.0, 1.0); }
+  else                  { m = 0.5;                             dir = vec2(0.0, 1.0); }
+
+  float front = uProgress * 1.34 - 0.17;
+  float d = m - front;                    // >0 ahead of the front, <0 behind it
+
+  /* blur peaks AT the front and resolves behind it */
+  float spatial = (uMode < 1.5) ? smoothstep(-0.95, 0.05, d) : 0.0;
+  float radius = spatial * uMaxBlur + uGlobalBlur;
+
+  float alpha = uAlpha;
+  if (uMode < 1.5){
+    /* wide soft band; a little smear is allowed ahead of the front because that
+       IS the effect — just not the full blur */
+    alpha *= smoothstep(0.14, -0.26, d);
+  }
+
+  vec4 tex = blurDir(uv, radius, dir);
+  gl_FragColor = vec4(tex.rgb, alpha);
+}
+`;
+
+/* ── GL helper ──────────────────────────────────────────────────────────── */
+class BlurReveal {
+  constructor(canvas){
+    this.canvas = canvas;
+    const gl = canvas.getContext('webgl', { alpha: false, premultipliedAlpha: false, antialias: false });
+    this.gl = gl;
+    this.ok = !!gl;
+    this.texW = 1; this.texH = 1; this.tex = null;
+    if (!this.ok) return;
+    this.prog = this.build(VERT, FRAG);
+    this.aPos = gl.getAttribLocation(this.prog, 'aPosition');
+    this.aUV  = gl.getAttribLocation(this.prog, 'aUV');
+    this.loc = {};
+    ['uTex','uTexel','uProgress','uMaxBlur','uGlobalBlur','uAlpha','uAspect','uMode','uZoom']
+      .forEach(u => this.loc[u] = gl.getUniformLocation(this.prog, u));
+    const data = new Float32Array([-1,-1, 0,1,   1,-1, 1,1,   -1,1, 0,0,   1,1, 1,0]);
+    this.buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  }
+  build(vs, fs){
+    const gl = this.gl;
+    const c = (t, s) => {
+      const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x);
+      if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x));
+      return x;
+    };
+    const p = gl.createProgram();
+    gl.attachShader(p, c(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, c(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    return p;
+  }
+  /* Create ONCE per scene. v1 called setTexture() on every frame, re-uploading a
+     full 1920x1080 image through texImage2D 60 times a second. */
+  makeTexture(src){
+    const gl = this.gl;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    return { tex, w: src.width, h: src.height };
+  }
+  disposeTextures(list){
+    if (!this.gl) return;
+    list.forEach(t => { if (t && t.tex) this.gl.deleteTexture(t.tex); });
+  }
+  resize(w, h, dpr){
+    this.canvas.width = Math.max(1, Math.round(w * dpr));
+    this.canvas.height = Math.max(1, Math.round(h * dpr));
+    if (this.ok) this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+  }
+  draw(handle, { progress, maxBlur, globalBlur, alpha, aspect, mode, zoom }){
+    if (!this.ok || !handle) return;
+    const gl = this.gl;
+    gl.useProgram(this.prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+    gl.enableVertexAttribArray(this.aPos);
+    gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(this.aUV);
+    gl.vertexAttribPointer(this.aUV, 2, gl.FLOAT, false, 16, 8);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, handle.tex);
+    gl.uniform1i(this.loc.uTex, 0);
+    gl.uniform2f(this.loc.uTexel, 1 / handle.w, 1 / handle.h);
+    gl.uniform1f(this.loc.uProgress, progress);
+    gl.uniform1f(this.loc.uMaxBlur, maxBlur);
+    gl.uniform1f(this.loc.uGlobalBlur, globalBlur);
+    gl.uniform1f(this.loc.uAlpha, alpha);
+    gl.uniform1f(this.loc.uAspect, aspect);
+    gl.uniform1f(this.loc.uMode, mode);
+    gl.uniform1f(this.loc.uZoom, zoom);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+}
+
+/* ── panel texture: black ground, white line, one orange phrase ─────────── */
+function tokenize(segs){
+  const out = [];
+  segs.forEach(s => s.t.split(/\s+/).filter(Boolean).forEach(w => out.push({ w, a: s.a })));
+  return out;
+}
+
+function wrapTokens(ctx, tokens, fs, maxW){
+  const lines = []; let cur = [], curW = 0;
+  const space = ctx.measureText(' ').width;
+  for (const tk of tokens){
+    ctx.font = `${tk.a ? 600 : 400} ${fs}px ${FONTS}`;
+    const w = ctx.measureText(tk.w).width;
+    const add = cur.length ? space + w : w;
+    if (cur.length && curW + add > maxW){
+      lines.push({ toks: cur, w: curW });
+      cur = [{ w: tk.w, a: tk.a, tw: w }]; curW = w;
+    } else {
+      cur.push({ w: tk.w, a: tk.a, tw: w }); curW += add;
+    }
+  }
+  if (cur.length) lines.push({ toks: cur, w: curW });
+  return lines;
+}
+
+function renderScene(scene, cssW, cssH, dpr){
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = theme.ground;
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  const maxW = cssW * 0.76;
+  const maxH = cssH * 0.40;
+  const tokens = tokenize(scene.segs);
+
+  /* fit: largest size whose wrapped block still fits the box */
+  let fs = 24, lines = null, lh = 0;
+  const start = Math.max(20, Math.round(cssH * 0.115));
+  for (let s = start; s >= 18; s -= 1){
+    ctx.font = `400 ${s}px ${FONTS}`;
+    const l = wrapTokens(ctx, tokens, s, maxW);
+    const lineH = s * 1.24;
+    if (l.length * lineH <= maxH){ fs = s; lines = l; lh = lineH; break; }
+    fs = s; lines = l; lh = lineH;   // keep the smallest attempt as fallback
+  }
+  if (!lines) { ctx.font = `400 20px ${FONTS}`; lines = wrapTokens(ctx, tokens, 20, maxW); lh = 24; }
+
+  ctx.textBaseline = 'alphabetic';
+  const totalH = lh * lines.length;
+  const y0 = (cssH - totalH) / 2 + lh * 0.72;
+  const space = (() => { ctx.font = `400 ${fs}px ${FONTS}`; return ctx.measureText(' ').width; })();
+
+  lines.forEach((line, li) => {
+    let x = cssW / 2 - line.w / 2;
+    line.toks.forEach(tk => {
+      ctx.font = `${tk.a ? 600 : 400} ${fs}px ${FONTS}`;
+      ctx.fillStyle = tk.a ? theme.accent : theme.ink;
+      ctx.fillText(tk.w, x, y0 + li * lh);
+      x += tk.tw + space;
+    });
+  });
+
+  return cv;
+}
+
+/* ── scene state as a pure function of time ─────────────────────────────── */
+function sceneState(i, t){
+  const s = SCENES[i];
+  const inStart = s.start;
+  const inEnd = inStart + IN;            // == the outgoing scene's outStart
+  const outStart = inEnd + s.hold;
+  const outEnd = outStart + OUT;
+
+  let alpha, blurN;
+  if (t >= inStart && t < inEnd){
+    /* crossover, entering: fade up from 0 while resolving out of blur */
+    const x = win(t, inStart, inEnd);
+    alpha = xfade(x);
+    blurN = blurCurve(1 - x);
+  } else if (t >= inEnd && t < outStart){
+    alpha = 1; blurN = 0;                // hold, sharp
+  } else if (t >= outStart && t < outEnd){
+    /* crossover, leaving: the mirror of the entry — same curve, same length */
+    const x = win(t, outStart, outEnd);
+    alpha = 1 - xfade(x);
+    blurN = blurCurve(x);
+  } else {
+    return null;                          // not on screen
+  }
+
+  /* Within a crossover the two live scenes drive this from mirrored values of the
+     SAME curve: alpha sums to 1 (the frame never dips dark) and blur is conserved
+     (whatever the outgoing scene gains, the incoming scene has lost). v2 faded
+     each side on a different curve over a different window, so the sum wandered
+     and the cut read as a smudge followed by a pop. */
+  return { alpha, progress: win(t, inStart, inEnd), globalBlur: blurN * MAX_BLUR, mode: s.cut };
+}
+
+/* ── setup ──────────────────────────────────────────────────────────────── */
+const stage = document.getElementById('stage');
+const canvas = document.getElementById('glcanvas');
+/* A shader compile/link failure throws out of the constructor and would kill the
+   whole script, leaving a black page and no explanation. Degrade loudly instead. */
+let gl;
+try {
+  gl = new BlurReveal(canvas);
+} catch (e) {
+  console.error('blur-reveal: shader failed to build —', e);
+  gl = { ok: false, gl: null, resize(){}, makeTexture(){ return null; },
+         disposeTextures(){}, draw(){} };
+}
+const numEl = document.getElementById('num');
+const cutEl = document.getElementById('cut');
+
+let textures = [];
+let ready = false;
+
+function rebuildTextures(){
+  const rect = stage.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  gl.resize(rect.width, rect.height, dpr);
+  if (!gl.ok) return;
+  gl.disposeTextures(textures);          // free the previous set on resize
+  textures = SCENES.map(s => gl.makeTexture(renderScene(s, rect.width, rect.height, dpr)));
+}
+
+/* ── render ─────────────────────────────────────────────────────────────── */
+let lastT = 0;              // last time drawn, so __rebuild() can re-draw this frame
+function renderAt(t){
+  lastT = t;
+  const tt = ((t % TOTAL) + TOTAL) % TOTAL;
+  const aspect = canvas.width / Math.max(1, canvas.height);
+
+  const g = gl.gl;
+  if (g){ const [br, bg, bb] = theme.groundRgb; g.clearColor(br, bg, bb, 1); g.clear(g.COLOR_BUFFER_BIT); }
+
+  /* ONE push-in for the whole reel, not one per scene.
+     v2 restarted zoom at 1.0 on every scene, so the camera snapped back at each
+     cut — motion was continuous *within* a scene and discontinuous *across* them,
+     which is most of why the cuts read as abrupt. A single slow drift over the
+     full loop puts every cut inside one continuous move.
+
+     It travels out AND back (a smooth triangle) rather than ramping forever,
+     because a monotonic push-in would snap at the loop seam — the same class of
+     bug as the dead beat. smootherstep on each half means zero velocity at the
+     turnarounds too, so nothing kicks at the seam or at the apex. */
+  const half = TOTAL / 2;
+  const zp = tt < half ? tt / half : 1 - (tt - half) / half;
+  const zoom = 1 + (ZOOM_END - 1) * smoother(zp);
+
+  let shown = -1, shownAlpha = 0;
+  SCENES.forEach((s, i) => {
+    /* the final scene's blur-out wraps past the loop point, so evaluate one
+       period ahead as well before concluding a scene is off screen. That wrap
+       is what makes the loop seam overlap instead of dead-beating. */
+    const st = (s.start <= tt && tt < s.start + s.slot)
+      ? sceneState(i, tt)
+      : null;
+    const stw = st || sceneState(i, tt + TOTAL);
+    if (!stw) return;
+    gl.draw(textures[i], {
+      progress: stw.progress, maxBlur: MAX_BLUR, globalBlur: stw.globalBlur,
+      alpha: stw.alpha, aspect, mode: stw.mode, zoom,
+    });
+    if (stw.alpha > shownAlpha) { shownAlpha = stw.alpha; shown = i; }
+  });
+
+  if (shown >= 0){
+    numEl.textContent = String(shown + 1).padStart(2, '0');
+    cutEl.textContent = 'SCENE ' + SCENES[shown].scene + '/' + SCENE_COUNT +
+                        ' · ' + SCENES[shown].cutName;
+  }
+}
+
+let rafId = 0;
+function loop(now){
+  renderAt(now);            // rAF timestamps are already ms
+  rafId = requestAnimationFrame(loop);
+}
+
+/* ── boot ───────────────────────────────────────────────────────────────── */
+const params = new URLSearchParams(location.search);
+const fixedT = params.has('t') ? parseFloat(params.get('t')) : null;
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+window.__seek = (seconds) => {
+  /* SECONDS, matching __duration and the convention the blueprint page uses.
+     Cancel the preview loop first, or rAF keeps drawing its own clock between
+     the seek and the screenshot and captures come out mixed. */
+  if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+  renderAt(seconds * 1000);
+};
+window.__duration = TOTAL / 1000;
+/* block layout, so a verifier can check every block renders without re-deriving
+   the timing formula in a second place (which is how the two drift apart) */
+window.__scenes = () => SCENES.map((s, i) => ({
+  i, scene: s.scene, cut: s.cutName, hold: s.hold, start: s.start, slot: s.slot,
+  text: s.segs.map((x) => x.t).join(''),
+  holdFrom: s.start + IN, holdTo: s.start + IN + s.hold,
+}));
+
+/* ── the theming API ──────────────────────────────────────────────────────
+   Set the CSS custom properties, then call this. Nothing else is needed: the
+   variables are re-read and every texture re-rasterised. */
+window.__rebuild = () => {
+  readTheme();
+  rebuildTextures();
+  renderAt(lastT);
+};
+window.__theme = () => ({ ...theme });
+
+window.__ready = (async () => {
+  try { await document.fonts.load(`400 64px 'PlexMono Bonk'`); } catch (e) {}
+  try { await document.fonts.load(`600 64px 'PlexMono Bonk'`); } catch (e) {}
+  await document.fonts.ready;
+  readTheme();
+  rebuildTextures();
+  if (fixedT !== null) renderAt(fixedT);
+  else renderAt(SCENES[0].start + IN + 50);
+  ready = true;
+  return true;
+})();
+
+const t0 = performance.now();
+if (reduced){
+  /* hold the first line sharp instead of animating */
+  window.__ready.then(() => { renderAt(SCENES[0].start + IN + 50); });
+} else if (fixedT !== null){
+  window.__ready.then(() => renderAt(fixedT));
+} else {
+  window.__ready.then(() => { rafId = requestAnimationFrame(loop); });
+}
+
+window.addEventListener('resize', () => {
+  readTheme();              // a stylesheet swap or var change lands on resize too
+  rebuildTextures();
+  if (fixedT !== null) renderAt(fixedT);
+});
+</script>
+</body>
+</html>

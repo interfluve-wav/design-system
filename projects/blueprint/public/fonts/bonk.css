@@ -1,0 +1,74 @@
+/* Bonk — the brand's own typeface, as a shared stylesheet.
+ *
+ * Extracted from bonk-motion-system-v3.html, which had these @font-face rules inlined.
+ * Standalone assets should not each carry their own copy, so they link this instead.
+ *
+ * Source: 'Design Assets/bonk typeface/'. Bonk-VF is a VARIABLE font -- one file covers
+ * wght 300-700 (and slnt -10-0), so a single @font-face serves every weight. The static
+ * cuts (Regular/Bold/Light/Italic) and the two display cuts are declared separately.
+ *
+ * Verified: 665 glyphs, 0 missing across the 75-character label charset. Confirm it is
+ * actually PAINTING rather than silently falling back by diffing rendered ink against a
+ * forced fallback -- document.fonts.check() returns true for a font that never loaded.
+ */
+
+@font-face {
+  font-family: 'Bonk';
+  src: url('Bonk-VF.woff2') format('woff2-variations'),
+       url('Bonk-VF.woff2') format('woff2'),
+       url('Bonk-VF.ttf') format('truetype');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: block;   /* never flash a fallback into a capture */
+}
+
+@font-face {
+  font-family: 'Bonk';
+  src: url('Bonk-Italic.woff2') format('woff2');
+  font-weight: 300 700;
+  font-style: italic;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Bonk Regular';
+  src: url('Bonk-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Bonk Bold';
+  src: url('Bonk-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Bonk Light';
+  src: url('Bonk-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Bonk Display';
+  src: url('BonkDisplay-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Bonk Headline';
+  src: url('BonkHeadline-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: block;
+}
+
+/* Helpers for asset labels. Bonk is the brand face for TEXT; the wordmark itself is
+   vector paths from logo/current/bonk-mark.js, never set in this font. */
+.bonk        { font-family:'Bonk', ui-sans-serif, system-ui, sans-serif }
+.bonk-d      { font-family:'Bonk Display', 'Bonk', ui-sans-serif, sans-serif }
+.bonk-h      { font-family:'Bonk Headline', 'Bonk', ui-sans-serif, sans-serif }
+.bonk-label  { font-family:'Bonk', ui-sans-serif, sans-serif;
+               font-weight:600; letter-spacing:.06em; text-transform:lowercase }

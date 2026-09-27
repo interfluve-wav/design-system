@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>bonk — superscript lockup</title>
+<style>
+  /* ── THEME ────────────────────────────────────────────────────────────────
+     Colour lives HERE and nowhere else. The mark's two tiers are separate
+     variables, so "teal", "purple" and "both" are variable changes rather than
+     code edits — and the fill is applied to the paths via CSS, not baked into
+     the geometry module.
+
+     The superscript cut is a slightly HEAVIER and WIDER drawing than the
+     canonical lowercase lockup (measured: mean +4.8% on glyph aspect ratios,
+     stem 32.2% of x-height vs 27.9%), which is why it has its own geometry
+     rather than reusing bonk-mark-v2.js. */
+  :root{
+    --ground:#0b0b0b;
+    --main:#8fb3a9;      /* pastel earthy teal */
+    --sup:#b0a0d0;       /* pastel earthy purple */
+    --label:rgba(255,255,255,0.40);
+    --label-bright:rgba(255,255,255,0.82);
+  }
+  /* Pastels that read beautifully on near-black are too pale for a light ground,
+     so the light scheme swaps in darker, equally earthy tones. Both are measured
+     live on the page rather than asserted here. */
+  :root[data-ground="light"]{
+    --ground:#f5f9e9;
+    --main:#457069;
+    --sup:#6e5f91;
+    --label:rgba(20,26,22,0.44);
+    --label-bright:rgba(20,26,22,0.86);
+  }
+  :root[data-scheme="teal"]   { --sup:var(--main); }
+  :root[data-scheme="purple"] { --main:var(--sup); }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background:var(--ground);
+    color:var(--label-bright);
+    font:14px/1.5 ui-monospace,"SF Mono",Menlo,monospace;
+    display:grid; grid-template-rows:auto 1fr auto;
+    padding:clamp(20px,4vw,44px); gap:0;
+    transition:background .35s ease;
+  }
+
+  /* ── masthead: telegraph headline + italic accent, label overlays, no rules ── */
+  header{ display:flex; align-items:baseline; gap:.7em; flex-wrap:wrap; }
+  h1{
+    margin:0; font:600 clamp(13px,1.15vw,16px)/1 ui-monospace,monospace;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--label-bright);
+  }
+  header em{ font-style:italic; color:var(--main); letter-spacing:.02em; text-transform:none; }
+  header .meta{ margin-left:auto; color:var(--label); letter-spacing:.06em; font-size:12px; }
+
+  /* ── the mark ── */
+  main{ display:grid; place-content:center; }
+  #mark{ display:block; width:min(88vw,1020px); height:auto; }
+  #mark path{ transition:fill .3s ease; }
+  #mark .tier-main{ fill:var(--main); }
+  #mark .tier-sup{ fill:var(--sup); }
+
+  /* ── footer: horizontal, sparse, no dividers ── */
+  footer{ display:flex; align-items:flex-end; gap:clamp(18px,4vw,52px); flex-wrap:wrap; }
+  .ladder{ display:flex; align-items:flex-end; gap:clamp(14px,2.4vw,30px); }
+  .ladder figure{ margin:0; display:grid; gap:9px; justify-items:start; }
+  .ladder svg{ display:block; }
+  .ladder figcaption{ font-size:10px; letter-spacing:.1em; color:var(--label); }
+  .ladder .tier-main{ fill:var(--main); }
+  .ladder .tier-sup{ fill:var(--sup); }
+
+  .swatches{ display:flex; gap:clamp(16px,3vw,40px); margin-left:auto; }
+  .sw{ display:flex; align-items:center; gap:9px; font-size:11px; letter-spacing:.06em; }
+  .sw i{ width:13px; height:13px; border-radius:50%; display:block; flex:none; }
+  .sw b{ font-weight:600; color:var(--label-bright); }
+  .sw span{ color:var(--label); }
+
+  .toggles{ display:flex; gap:6px; flex-wrap:wrap; }
+  button{
+    font:inherit; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--label); background:transparent; border:0; padding:7px 11px;
+    border-radius:999px; cursor:pointer; transition:color .2s,background .2s;
+  }
+  button:hover{ color:var(--label-bright); }
+  button[aria-pressed="true"]{ background:var(--main); color:var(--ground); font-weight:600; }
+  @media (max-width:760px){ .swatches{ margin-left:0; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>bonk <em>superscript</em> lockup</h1>
+  <span class="meta" id="spec">—</span>
+</header>
+
+<main>
+  <svg id="mark" viewBox="0 0 693 211" role="img" aria-label="bonk dj superscript lockup"></svg>
+</main>
+
+<footer>
+  <div class="ladder" id="ladder"></div>
+
+  <div class="swatches">
+    <div class="sw"><i id="sw-main"></i><span>main</span> <b id="cx-main">—</b></div>
+    <div class="sw"><i id="sw-sup"></i><span>dj</span> <b id="cx-sup">—</b></div>
+  </div>
+
+  <div class="toggles" id="toggles">
+    <button data-scheme="duo"    aria-pressed="true">teal + purple</button>
+    <button data-scheme="teal">teal</button>
+    <button data-scheme="purple">purple</button>
+    <button data-ground="dark"  aria-pressed="true">dark</button>
+    <button data-ground="light">light</button>
+  </div>
+</footer>
+
+<script src="./bonk-mark-sup.js"></script>
+<script>
+const M = window.BONK_MARK_SUP;
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+/* Build the mark from the measured module. Two path groups, so the main word and
+   the superscript can take different colours without duplicating geometry. */
+function buildMark(viewBoxSize){
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${M.width} ${M.height}`);
+  svg.setAttribute('height', viewBoxSize);
+  svg.setAttribute('width', viewBoxSize * (M.width / M.height));
+  [['tier-main', M.dMain], ['tier-sup', M.dSup]].forEach(([cls, d]) => {
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', d); p.setAttribute('class', cls);
+    svg.appendChild(p);
+  });
+  return svg;
+}
+
+const mark = document.getElementById('mark');
+[['tier-main', M.dMain], ['tier-sup', M.dSup]].forEach(([cls, d]) => {
+  const p = document.createElementNS(SVGNS, 'path');
+  p.setAttribute('d', d); p.setAttribute('class', cls);
+  mark.appendChild(p);
+});
+
+/* Size ladder. The whole point of the superscript is that it stays compact, so
+   prove it at the sizes a mark actually gets used at — down to favicon scale. */
+[112, 56, 28, 16, 11].forEach(h => {
+  const fig = document.createElement('figure');
+  fig.appendChild(buildMark(h));
+  const cap = document.createElement('figcaption');
+  cap.textContent = h + 'px';
+  fig.appendChild(cap);
+  document.getElementById('ladder').appendChild(fig);
+});
+
+/* ── contrast, measured from what is actually rendered ──────────────────────
+   Read the paint off the live DOM. getComputedStyle resolves var() chains and
+   returns rgb(), so this cannot drift from what is on screen.
+
+   Re-parsing the stylesheet's raw text does NOT work, and it fails silently into
+   a plausible-looking number: a digits-only regex over "#8fb3a9" yields [8,3,9]
+   because the hex LETTERS are dropped (which produced 994.79:1 here), and a value
+   that is itself a var() reference — as --main becomes under data-scheme="purple"
+   — yields nothing at all. */
+const srgb = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const lum = ([r, g, b]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+
+const rgbOf = (el, prop) => {
+  const v = getComputedStyle(el).getPropertyValue(prop);
+  return (v.match(/\d+/g) || ['0', '0', '0']).slice(0, 3).map(Number);
+};
+const readColours = () => ({
+  ground: rgbOf(document.body, 'background-color'),
+  main:   rgbOf(mark.querySelector('.tier-main'), 'fill'),
+  sup:    rgbOf(mark.querySelector('.tier-sup'), 'fill'),
+});
+const hex = ([r, g, b]) => '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+
+function report(){
+  const c = readColours();
+  const rm = ratio(c.main, c.ground), rs = ratio(c.sup, c.ground);
+  document.getElementById('sw-main').style.background = hex(c.main);
+  document.getElementById('sw-sup').style.background  = hex(c.sup);
+  document.getElementById('cx-main').textContent = rm.toFixed(2) + ':1';
+  document.getElementById('cx-sup').textContent  = rs.toFixed(2) + ':1';
+  document.getElementById('spec').textContent =
+    `${M.width}×${M.height} · ${hex(c.main)} / ${hex(c.sup)}`;
+  window.__contrast = { main: rm, sup: rs };
+}
+
+/* ── toggles ── */
+const root = document.documentElement;
+const params = new URLSearchParams(location.search);
+if (params.get('scheme')) root.dataset.scheme = params.get('scheme');
+if (params.get('ground')) root.dataset.ground = params.get('ground');
+document.querySelectorAll('#toggles button').forEach(b => {
+  b.addEventListener('click', () => {
+    const kind = b.dataset.scheme ? 'scheme' : 'ground';
+    const val = b.dataset[kind];
+    if (kind === 'scheme' && val === 'duo') delete root.dataset.scheme;
+    else root.dataset[kind] = val;
+    document.querySelectorAll(`#toggles button[data-${kind}]`)
+      .forEach(o => o.setAttribute('aria-pressed', String(o === (val === 'duo' ? b : b))));
+    refreshPressed(); report();
+  });
+});
+function refreshPressed(){
+  document.querySelectorAll('#toggles button').forEach(b => {
+    const kind = b.dataset.scheme ? 'scheme' : 'ground';
+    const cur = kind === 'scheme' ? (root.dataset.scheme || 'duo') : (root.dataset.ground || 'dark');
+    b.setAttribute('aria-pressed', String(b.dataset[kind] === cur));
+  });
+}
+refreshPressed();
+report();
+
+/* Resolved state, so a variant can be asserted rather than eyeballed. */
+window.__config = () => ({
+  scheme: root.dataset.scheme || 'duo',
+  ground: root.dataset.ground || 'dark',
+  mark: { w: M.width, h: M.height, glyphs: M.letters.length,
+          supTop: M.metrics.supTop, supX0: M.metrics.supX0,
+          baseline: M.metrics.baseline, stem: M.metrics.stemWidth,
+          xHeight: M.metrics.xHeight, ink: M.metrics.inkCoveragePct },
+  colours: readColours(),
+  contrast: window.__contrast,
+  source: M.source,
+});
+window.__ready = true;
+</script>
+</body>
+</html>
