@@ -1,0 +1,106 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   frames.css — the standard motion-piece chrome.
+
+   The house taste, in CSS so it is identical everywhere:
+     · label overlay, bottom-left, on a dark ground
+     · italic accent, top-right
+     · generous negative space
+     · NO rules, NO dividers, NO borders, NO boxes
+
+   Everything here is optional. Mark any element you want stripped from a
+   capture with class="mf-chrome"; render.py --no-chrome hides them all.
+
+   The real reference for a motion piece is a <canvas>. This file is for the
+   metadata a human needs while reviewing one.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.mf-stage{
+  position:relative;
+  width:100%;
+  height:100%;
+  background:var(--ground);
+  overflow:hidden;
+}
+
+.mf-stage > canvas{
+  display:block;
+  width:100%;
+  height:100%;
+}
+
+/* ── an overlay cluster ────────────────────────────────────────────────────
+   .mf-tl .mf-tr .mf-bl .mf-br position it; nothing else draws a line. */
+.mf-chrome{
+  position:absolute;
+  z-index:5;
+  display:flex;
+  align-items:baseline;
+  gap:.55em;
+  font-family:var(--type-mono);
+  font-size:11px;
+  letter-spacing:.2em;
+  text-transform:lowercase;
+  color:var(--label);
+  pointer-events:none;
+  font-variant-numeric:tabular-nums;
+}
+.mf-tl{ top:20px;    left:26px }
+.mf-tr{ top:22px;    right:26px }
+.mf-bl{ bottom:22px; left:26px }
+.mf-br{ bottom:22px; right:26px }
+
+/* the mark: a dot plus a word. No ring, no box, no badge background. */
+.mf-mark{ color:var(--ink); font-weight:600 }
+.mf-mark::before{
+  content:'';
+  display:inline-block;
+  width:8px; height:8px;
+  margin-right:10px;
+  border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 14px var(--accent);
+  vertical-align:middle;
+}
+
+/* an italic accent — the one place letterforms are allowed to lean */
+.mf-kicker{
+  font-family:var(--type-family);
+  font-style:italic;
+  font-weight:400;
+  letter-spacing:0;
+  text-transform:none;
+  font-size:13px;
+  color:var(--accent);
+  opacity:.88;
+}
+
+/* a counter or a cut label: the accent marks the live value, never a fill */
+.mf-num b{ color:var(--accent); font-weight:600 }
+.mf-cut{ color:var(--label-dim) }
+
+/* ── label block, bottom-left ─────────────────────────────────────────────
+   Two lines, tight, no separator between them. */
+.mf-label{
+  position:absolute;
+  bottom:22px; left:26px;
+  z-index:5;
+  pointer-events:none;
+}
+.mf-label .l1{
+  font-family:var(--type-family);
+  font-weight:700;
+  font-size:15px;
+  color:var(--label);
+  letter-spacing:-.01em;
+}
+.mf-label .l2{
+  font-family:var(--type-family);
+  font-weight:400;
+  font-size:15px;
+  color:var(--label-dim);
+  letter-spacing:-.01em;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .mf-stage > canvas{ opacity:.999 }
+}

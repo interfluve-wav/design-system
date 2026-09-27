@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>palette check — the five against design.md</title>
+<style>
+  :root{
+    --orange:#ff6b1a; --orange-deep:#e96218; --orange-text:#ffb37a;
+    --black:#000000; --ink:#161616; --white:#ffffff; --near:#fefefe;
+    --brown:#190e07; --green:#00ff85;
+  }
+  html,body{background:#0a0a0b;color:#fff;margin:0;
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  .wrap{padding:22px 24px 26px;width:640px}
+  h2{font:600 11px/1 ui-monospace,monospace;letter-spacing:.14em;
+    text-transform:uppercase;color:#6d6d74;margin:0 0 14px}
+  h2+ h2{margin-top:26px}
+  .row{display:flex;align-items:center;gap:12px;padding:7px 0}
+  .chip{width:52px;height:34px;border-radius:3px;flex:none;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+  .meta{flex:1;min-width:0}
+  .nm{color:#fff}
+  .hx{color:#8b8b93}
+  .v{font-size:11px;letter-spacing:.02em}
+  .ok{color:#5fd08a}
+  .bad{color:#e8695f}
+  .warn{color:#dcb45a}
+  .proof{margin-top:8px;padding:12px 14px;border-radius:4px;
+    background:#111114;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+  .proof b{color:var(--orange)}
+  .mix{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .mix .bar{height:24px;flex:1;border-radius:2px;
+    background:linear-gradient(90deg,#000,var(--orange))}
+  .mix code{color:#8b8b93;font-size:11px}
+  .miss{display:flex;align-items:center;gap:10px;padding:6px 0;color:#c9c9d1}
+  .miss .chip{width:26px;height:26px}
+</style>
+<div class="wrap">
+  <h2>submitted — verdict against design.md</h2>
+
+  <div class="row">
+    <div class="chip" style="background:#ff6b1a"></div>
+    <div class="meta"><div class="nm">Pumpkin Spice <span class="hx">#FF6B1A</span></div>
+      <div class="v ok">exact — <code>--brand-orange</code> · hsl 21° 100% 55%</div></div>
+  </div>
+
+  <div class="row">
+    <div class="chip" style="background:#000000"></div>
+    <div class="meta"><div class="nm">Black <span class="hx">#000000</span></div>
+      <div class="v ok">exact — jet black, the dark-theme canvas</div></div>
+  </div>
+
+  <div class="row">
+    <div class="chip" style="background:#fefefe"></div>
+    <div class="meta"><div class="nm">White <span class="hx">#FEFEFE</span></div>
+      <div class="v warn">not a token — the system's white is <code>#ffffff</code>; this is 1/255 under</div></div>
+  </div>
+
+  <div class="row">
+    <div class="chip" style="background:#e96218"></div>
+    <div class="meta"><div class="nm">Autumn Leaf <span class="hx">#E96218</span></div>
+      <div class="v warn">not a token — but it is the brand orange exactly, at 91.4% over black (hue 21.2° = identical)</div></div>
+  </div>
+
+  <div class="row">
+    <div class="chip" style="background:#190e07"></div>
+    <div class="meta"><div class="nm">Coffee Bean <span class="hx">#190E07</span></div>
+      <div class="v bad">not a token — warm brown (hue 23.3°); every dark surface the system defines is neutral, hue 0°</div></div>
+  </div>
+
+  <h2>#E96218 is the brand orange, dimmed — not a second colour</h2>
+  <div class="proof">
+    orange × alpha over black &nbsp;→&nbsp; <b>α = 0.9141</b> gives <b>#E96218</b>
+    <div class="mix">
+      <code>#000000</code>
+      <div class="bar"></div>
+      <code>#ff6b1a</code>
+    </div>
+    <div class="mix" style="margin-top:4px">
+      <code style="width:70px">delta</code>
+      <code>rgb(0.1, −0.19, −0.23) — a rounding match, not an approximation</code>
+    </div>
+  </div>
+
+  <h2>what the five leave out</h2>
+  <div class="miss"><div class="chip" style="background:#ffb37a"></div>
+    <span><code>#ffb37a</code> — <code>--brand-orange-text</code>. The only lighter orange the system defines, and it is missing here.</span></div>
+  <div class="miss"><div class="chip" style="background:#ffffff"></div>
+    <span><code>#ffffff</code> — the real white, and the wordmark's own fill.</span></div>
+  <div class="miss"><div class="chip" style="background:#161616"></div>
+    <span><code>#161616</code> — jet black's other end; the surfaces above pure black.</span></div>
+  <div class="miss"><div class="chip" style="background:#00ff85"></div>
+    <span><code>#00ff85</code> — Volumo green, in-app dark theme only, never on a brand surface.</span></div>
+</div>

@@ -1,0 +1,635 @@
+[
+  {
+    "file": "curves-v2.html",
+    "rel": "motion-assets/curves-v2.html",
+    "title": "bonk \u2014 curves v2",
+    "desc": "theme",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--curve",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--curve-2",
+        "value": "rgba(255,107,26,.72)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--curve-3",
+        "value": "rgba(255,107,26,.52)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--grid",
+        "value": "rgba(255,255,255,.26)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--axis",
+        "value": "rgba(255,255,255,.46)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--tick",
+        "value": "rgba(255,255,255,.22)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--label",
+        "value": "#ffffff",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--label-dim",
+        "value": "rgba(255,255,255,.52)",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--mark",
+        "value": "#ffffff",
+        "note": "",
+        "role": "the mark's colour"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": true,
+    "seek": true,
+    "ready": true,
+    "font_shared": true,
+    "mark_shared": true,
+    "lines": 279,
+    "bytes": 10100,
+    "family": "motion-assets",
+    "purpose": "tangent curves, second pass",
+    "render": null
+  },
+  {
+    "file": "curves.html",
+    "rel": "motion-assets/curves.html",
+    "title": "bonk \u2014 curves",
+    "desc": "theme",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--curve",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--curve-dim",
+        "value": "rgba(255,107,26,.42)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--hairline",
+        "value": "rgba(255,255,255,.30)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--tick",
+        "value": "rgba(255,255,255,.20)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--label",
+        "value": "#ffffff",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--label-dim",
+        "value": "rgba(255,255,255,.52)",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--mark",
+        "value": "#ffffff",
+        "note": "",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--boxFrac",
+        "value": "0.789",
+        "note": "clip 05 bbox span 0.789 of frame",
+        "role": "tuning value"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": true,
+    "seek": true,
+    "ready": true,
+    "font_shared": true,
+    "mark_shared": true,
+    "lines": 270,
+    "bytes": 10360,
+    "family": "motion-assets",
+    "purpose": "tangent curves sweep and hand off to one another",
+    "render": null
+  },
+  {
+    "file": "glow.html",
+    "rel": "motion-assets/glow.html",
+    "title": "bonk \u2014 glow",
+    "desc": "theme",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--mark",
+        "value": "#ff6b1a",
+        "note": "the mark's resting fill, held very low",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--markDim",
+        "value": "0.115",
+        "note": "",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--light",
+        "value": "#ff6b1a",
+        "note": "the light that drifts through the mark",
+        "role": "the moving light"
+      },
+      {
+        "name": "--lightPeak",
+        "value": "0.98",
+        "note": "",
+        "role": "the moving light"
+      },
+      {
+        "name": "--label",
+        "value": "#ffffff",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--label-dim",
+        "value": "rgba(255,255,255,.42)",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--accent",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "accent colour"
+      },
+      {
+        "name": "--markW",
+        "value": "0.735",
+        "note": "mark width as a fraction of the frame width",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--duration",
+        "value": "10",
+        "note": "",
+        "role": "seconds the piece runs"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": true,
+    "seek": true,
+    "ready": true,
+    "font_shared": true,
+    "mark_shared": true,
+    "lines": 230,
+    "bytes": 8508,
+    "family": "motion-assets",
+    "purpose": "the logo as a window \u2014 a soft light drifts *through* the mark",
+    "render": "/Users/suhaas/Pictures/design - tiles - motion/bonk-glow.gif"
+  },
+  {
+    "file": "ripple.html",
+    "rel": "motion-assets/ripple.html",
+    "title": "bonk \u2014 ripple",
+    "desc": "theme",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--ring",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--coreAlpha",
+        "value": "0.95",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--satAlpha",
+        "value": "0.92",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--coreR",
+        "value": "0.370",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--satR",
+        "value": "0.048",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--boxFrac",
+        "value": "0.431",
+        "note": "",
+        "role": "tuning value"
+      }
+    ],
+    "has_cfg": true,
+    "has_light": true,
+    "seek": true,
+    "ready": true,
+    "font_shared": true,
+    "mark_shared": false,
+    "lines": 188,
+    "bytes": 8075,
+    "family": "motion-assets",
+    "purpose": "a disc grows; satellites multiply outward from its edge",
+    "render": "/Users/suhaas/Pictures/design - tiles - motion/bonk-ripple-light.gif"
+  },
+  {
+    "file": "timeline.html",
+    "rel": "motion-assets/timeline.html",
+    "title": "bonk \u2014 timeline",
+    "desc": "theme",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--bar",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--ramp",
+        "value": "rgba(255,107,26,.55)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--rail",
+        "value": "rgba(255,255,255,.14)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--label",
+        "value": "#ffffff",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--label-dim",
+        "value": "rgba(255,255,255,.46)",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--mark",
+        "value": "#ffffff",
+        "note": "",
+        "role": "the mark's colour"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": true,
+    "seek": true,
+    "ready": true,
+    "font_shared": true,
+    "mark_shared": true,
+    "lines": 238,
+    "bytes": 8736,
+    "family": "motion-assets",
+    "purpose": "a scrubber runs the frame; the mark rides the playhead",
+    "render": null
+  },
+  {
+    "file": "typeon.html",
+    "rel": "motion-assets/typeon.html",
+    "title": "bonk \u2014 typeon",
+    "desc": "theme",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--type",
+        "value": "#ffffff",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--rule",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--type-dim",
+        "value": "rgba(255,255,255,.40)",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--mark",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "the mark's colour"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": true,
+    "seek": true,
+    "ready": true,
+    "font_shared": true,
+    "mark_shared": true,
+    "lines": 252,
+    "bytes": 9781,
+    "family": "motion-assets",
+    "purpose": "edge-on type wipes flat, then resolves to the mark",
+    "render": "/Users/suhaas/Pictures/design - tiles - motion/bonk-typeon-light.gif"
+  },
+  {
+    "file": "bonk-motion-system-v2.html",
+    "rel": "motion-system/bonk-motion-system-v2.html",
+    "title": "BONK \u2014 motion system v2 (real mark)",
+    "desc": "THEME",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--ink",
+        "value": "#ffffff",
+        "note": "",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--accent",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "accent colour"
+      },
+      {
+        "name": "--accent-soft",
+        "value": "#ffb37a",
+        "note": "",
+        "role": "accent colour"
+      },
+      {
+        "name": "--hair",
+        "value": "rgba(255,255,255,0.30)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--hair-dim",
+        "value": "rgba(255,255,255,0.16)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--hair-bright",
+        "value": "rgba(255,255,255,0.62)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--label",
+        "value": "rgba(255,255,255,0.44)",
+        "note": "",
+        "role": "label / type colour"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": false,
+    "seek": true,
+    "ready": true,
+    "font_shared": false,
+    "mark_shared": false,
+    "lines": 674,
+    "bytes": 23462,
+    "family": "motion-system",
+    "purpose": "",
+    "render": "/Users/suhaas/Pictures/design - tiles - motion/bonk-motion-system-v2-mark.gif"
+  },
+  {
+    "file": "bonk-motion-system-v3.html",
+    "rel": "motion-system/bonk-motion-system-v3.html",
+    "title": "BONK \u2014 motion system v3 (reel-analysis primitives)",
+    "desc": "THEME",
+    "vars": [
+      {
+        "name": "--ground",
+        "value": "#000000",
+        "note": "",
+        "role": "background"
+      },
+      {
+        "name": "--ink",
+        "value": "#ffffff",
+        "note": "",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--accent",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "accent colour"
+      },
+      {
+        "name": "--accent-soft",
+        "value": "#ffb37a",
+        "note": "",
+        "role": "accent colour"
+      },
+      {
+        "name": "--hair",
+        "value": "rgba(255,255,255,0.30)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--hair-dim",
+        "value": "rgba(255,255,255,0.16)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--hair-bright",
+        "value": "rgba(255,255,255,0.62)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--label",
+        "value": "rgba(255,255,255,0.44)",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--floor",
+        "value": "0.12",
+        "note": "",
+        "role": "tuning value"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": false,
+    "seek": true,
+    "ready": true,
+    "font_shared": false,
+    "mark_shared": true,
+    "lines": 571,
+    "bytes": 23518,
+    "family": "motion-system",
+    "purpose": "",
+    "render": "/Users/suhaas/Pictures/design - tiles - motion/bonk-motion-system-v2-mark.gif"
+  },
+  {
+    "file": "bonk-motion-system.html",
+    "rel": "motion-system/bonk-motion-system.html",
+    "title": "Bonk! Motion System v1",
+    "desc": "easings (named in the spec)",
+    "vars": [
+      {
+        "name": "--brand-orange",
+        "value": "#ff6b1a",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--brand-orange-soft",
+        "value": "rgba(255,107,26,0.12)",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--brand-orange-glow",
+        "value": "rgba(255,107,26,0.30)",
+        "note": "",
+        "role": "size as a fraction of the frame"
+      },
+      {
+        "name": "--brand-orange-text",
+        "value": "#ffb37a",
+        "note": "",
+        "role": "label / type colour"
+      },
+      {
+        "name": "--black",
+        "value": "#000000",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--jet",
+        "value": "#0b0b0c",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--white",
+        "value": "#ffffff",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--ink-14",
+        "value": "rgba(255,255,255,0.14)",
+        "note": "",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--ink-08",
+        "value": "rgba(255,255,255,0.08)",
+        "note": "",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--ink-55",
+        "value": "rgba(255,255,255,0.55)",
+        "note": "",
+        "role": "the mark's colour"
+      },
+      {
+        "name": "--font-ui",
+        "value": "'Inter',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif",
+        "note": "",
+        "role": "tuning value"
+      },
+      {
+        "name": "--font-mono",
+        "value": "'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace",
+        "note": "",
+        "role": "tuning value"
+      }
+    ],
+    "has_cfg": false,
+    "has_light": false,
+    "seek": false,
+    "ready": false,
+    "font_shared": false,
+    "mark_shared": false,
+    "lines": 405,
+    "bytes": 14862,
+    "family": "motion-system",
+    "purpose": "",
+    "render": "/Users/suhaas/Pictures/design - tiles - motion/bonk-motion-system-v2-mark.gif"
+  }
+]

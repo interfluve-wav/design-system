@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>bonk — motion library</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--app-font,system-ui);color:var(--foreground);
+       background:transparent;padding:4px 2px 40px;line-height:1.45}
+  .lede{max-width:64ch;margin:0 0 34px}
+  .lede h1{font-size:2.1rem;font-weight:600;letter-spacing:-.02em;margin-bottom:10px}
+  .lede p{color:var(--muted-foreground);font-size:.95rem}
+  .lede b{color:var(--foreground);font-weight:600}
+  .stat{display:flex;gap:28px;margin-top:18px;flex-wrap:wrap}
+  .stat div{font-size:.8rem;color:var(--muted-foreground)}
+  .stat strong{display:block;font-size:1.5rem;color:var(--foreground);
+                font-weight:600;letter-spacing:-.02em}
+  section{margin:0 0 44px}
+  section>header{margin-bottom:16px}
+  section>header h2{font-size:1.15rem;font-weight:600;letter-spacing:-.01em}
+  section>header p{color:var(--muted-foreground);font-size:.85rem;margin-top:2px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+         background:var(--accent);color:var(--foreground);
+         padding:1px 5px;border-radius:3px;font-size:.78rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:26px}
+  .card{display:flex;flex-direction:column;gap:9px}
+  .shot{position:relative;aspect-ratio:16/10;background:var(--card);
+         border-radius:6px;overflow:hidden;cursor:pointer}
+  .shot canvas,.shot iframe{width:100%;height:100%;border:0;display:block}
+  .ph{position:absolute;inset:0;display:grid;place-items:center;
+       color:var(--muted-foreground);font-size:.75rem;letter-spacing:.02em}
+  .shot:hover .ph{color:var(--foreground)}
+  .card h3{font-size:.95rem;font-weight:600}
+  .why{font-size:.82rem;color:var(--muted-foreground);min-height:2.4em}
+  .meta{display:flex;flex-wrap:wrap;gap:5px}
+  .flag{font-size:.66rem;letter-spacing:.03em;text-transform:lowercase;
+         color:var(--muted-foreground);background:var(--accent);
+         padding:2px 6px;border-radius:99px}
+  .grp h4{font-size:.68rem;font-weight:600;letter-spacing:.06em;
+           text-transform:uppercase;color:var(--muted-foreground);
+           margin:6px 0 4px}
+  .v{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:.74rem;
+      padding:2px 0}
+  .v code{font-family:ui-monospace,Menlo,monospace;color:var(--foreground)}
+  .v .val{color:var(--muted-foreground);font-family:ui-monospace,Menlo,monospace}
+  .v .role{grid-column:2;color:var(--muted-foreground);font-size:.68rem;opacity:.75}
+  .v.none{color:var(--muted-foreground);font-style:italic}
+  .path{font-family:ui-monospace,Menlo,monospace;font-size:.68rem;
+         color:var(--muted-foreground);opacity:.7;margin-top:2px}
+</style></head><body>
+<div class="lede">
+  <h1>Motion library</h1>
+  <p>9 pieces across 5 families. Everything here is
+  <b>plain HTML, CSS custom properties and canvas</b> — no compiled output, no
+  framework. Colours are variables, so you retune a piece by editing numbers at
+  the top of the file or by overriding a property from outside.
+  <b>Click any tile to run it live.</b></p>
+  <div class="stat">
+    <div><strong>9</strong>pieces</div>
+    <div><strong>42</strong>colour variables</div>
+    <div><strong>35</strong>tuning dials</div>
+    <div><strong>1</strong>with a config block</div>
+    <div><strong>8</strong>frame-seekable</div>
+  </div>
+</div>
+
+    <section>
+      <header><h2>The component sheet</h2>
+        <p>A grid of the individual motion primitives, shown together. <span class="mono">motion-system/</span></p></header>
+      <div class="grid">
+      <article class="card">
+        <div class="shot" data-src="/motion-system/bonk-motion-system-v2.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>BONK — motion system v2 (real mark)</h3>
+        <p class="why">THEME</p>
+        <div class="meta"><span class="flag">seekable</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div><div class="v"><code>--ink</code><span class="val">#ffffff</span><span class="role">the mark&#x27;s colour</span></div><div class="v"><code>--accent</code><span class="val">#ff6b1a</span><span class="role">accent colour</span></div><div class="v"><code>--accent-soft</code><span class="val">#ffb37a</span><span class="role">accent colour</span></div><div class="v"><code>--label</code><span class="val">rgba(255,255,255,0.44)</span><span class="role">label / type colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--hair</code><span class="val">rgba(255,255,255,0.30)</span><span class="role">tuning value</span></div><div class="v"><code>--hair-dim</code><span class="val">rgba(255,255,255,0.16)</span><span class="role">tuning value</span></div><div class="v"><code>--hair-bright</code><span class="val">rgba(255,255,255,0.62)</span><span class="role">tuning value</span></div></div>
+        <div class="path">motion-system/bonk-motion-system-v2.html · 674 lines</div>
+      </article>
+      <article class="card">
+        <div class="shot" data-src="/motion-system/bonk-motion-system-v3.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>BONK — motion system v3 (reel-analysis primitives)</h3>
+        <p class="why">THEME</p>
+        <div class="meta"><span class="flag">seekable</span> <span class="flag">shared mark</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div><div class="v"><code>--ink</code><span class="val">#ffffff</span><span class="role">the mark&#x27;s colour</span></div><div class="v"><code>--accent</code><span class="val">#ff6b1a</span><span class="role">accent colour</span></div><div class="v"><code>--accent-soft</code><span class="val">#ffb37a</span><span class="role">accent colour</span></div><div class="v"><code>--label</code><span class="val">rgba(255,255,255,0.44)</span><span class="role">label / type colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--hair</code><span class="val">rgba(255,255,255,0.30)</span><span class="role">tuning value</span></div><div class="v"><code>--hair-dim</code><span class="val">rgba(255,255,255,0.16)</span><span class="role">tuning value</span></div><div class="v"><code>--hair-bright</code><span class="val">rgba(255,255,255,0.62)</span><span class="role">tuning value</span></div><div class="v"><code>--floor</code><span class="val">0.12</span><span class="role">tuning value</span></div></div>
+        <div class="path">motion-system/bonk-motion-system-v3.html · 571 lines</div>
+      </article>
+      <article class="card">
+        <div class="shot" data-src="/motion-system/bonk-motion-system.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>Bonk! Motion System v1</h3>
+        <p class="why">easings (named in the spec)</p>
+        <div class="meta"></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--brand-orange-glow</code><span class="val">rgba(255,107,26,0.30)</span><span class="role">size as a fraction of the frame</span></div><div class="v"><code>--brand-orange-text</code><span class="val">#ffb37a</span><span class="role">label / type colour</span></div><div class="v"><code>--ink-14</code><span class="val">rgba(255,255,255,0.14)</span><span class="role">the mark&#x27;s colour</span></div><div class="v"><code>--ink-08</code><span class="val">rgba(255,255,255,0.08)</span><span class="role">the mark&#x27;s colour</span></div><div class="v"><code>--ink-55</code><span class="val">rgba(255,255,255,0.55)</span><span class="role">the mark&#x27;s colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--brand-orange</code><span class="val">#ff6b1a</span><span class="role">tuning value</span></div><div class="v"><code>--brand-orange-soft</code><span class="val">rgba(255,107,26,0.12)</span><span class="role">tuning value</span></div><div class="v"><code>--black</code><span class="val">#000000</span><span class="role">tuning value</span></div><div class="v"><code>--jet</code><span class="val">#0b0b0c</span><span class="role">tuning value</span></div><div class="v"><code>--white</code><span class="val">#ffffff</span><span class="role">tuning value</span></div></div>
+        <div class="path">motion-system/bonk-motion-system.html · 405 lines</div>
+      </article></div>
+    </section>
+    <section>
+      <header><h2>Single-idea studies</h2>
+        <p>One motion idea per file: light, ripple, edge-on type, curves, timeline. <span class="mono">motion-assets/</span></p></header>
+      <div class="grid">
+      <article class="card">
+        <div class="shot" data-src="/motion-assets/curves-v2.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>bonk — curves v2</h3>
+        <p class="why">tangent curves, second pass</p>
+        <div class="meta"><span class="flag">seekable</span> <span class="flag">light register</span> <span class="flag">shared font</span> <span class="flag">shared mark</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div><div class="v"><code>--label</code><span class="val">#ffffff</span><span class="role">label / type colour</span></div><div class="v"><code>--label-dim</code><span class="val">rgba(255,255,255,.52)</span><span class="role">label / type colour</span></div><div class="v"><code>--mark</code><span class="val">#ffffff</span><span class="role">the mark&#x27;s colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--curve</code><span class="val">#ff6b1a</span><span class="role">tuning value</span></div><div class="v"><code>--curve-2</code><span class="val">rgba(255,107,26,.72)</span><span class="role">tuning value</span></div><div class="v"><code>--curve-3</code><span class="val">rgba(255,107,26,.52)</span><span class="role">tuning value</span></div><div class="v"><code>--grid</code><span class="val">rgba(255,255,255,.26)</span><span class="role">tuning value</span></div><div class="v"><code>--axis</code><span class="val">rgba(255,255,255,.46)</span><span class="role">tuning value</span></div></div>
+        <div class="path">motion-assets/curves-v2.html · 279 lines</div>
+      </article>
+      <article class="card">
+        <div class="shot" data-src="/motion-assets/curves.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>bonk — curves</h3>
+        <p class="why">tangent curves sweep and hand off to one another</p>
+        <div class="meta"><span class="flag">seekable</span> <span class="flag">light register</span> <span class="flag">shared font</span> <span class="flag">shared mark</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div><div class="v"><code>--label</code><span class="val">#ffffff</span><span class="role">label / type colour</span></div><div class="v"><code>--label-dim</code><span class="val">rgba(255,255,255,.52)</span><span class="role">label / type colour</span></div><div class="v"><code>--mark</code><span class="val">#ffffff</span><span class="role">the mark&#x27;s colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--curve</code><span class="val">#ff6b1a</span><span class="role">tuning value</span></div><div class="v"><code>--curve-dim</code><span class="val">rgba(255,107,26,.42)</span><span class="role">tuning value</span></div><div class="v"><code>--hairline</code><span class="val">rgba(255,255,255,.30)</span><span class="role">tuning value</span></div><div class="v"><code>--tick</code><span class="val">rgba(255,255,255,.20)</span><span class="role">tuning value</span></div><div class="v"><code>--boxFrac</code><span class="val">0.789</span><span class="role">clip 05 bbox span 0.789 of frame</span></div></div>
+        <div class="path">motion-assets/curves.html · 270 lines</div>
+      </article>
+      <article class="card">
+        <div class="shot" data-src="/motion-assets/glow.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>bonk — glow</h3>
+        <p class="why">the logo as a window — a soft light drifts *through* the mark</p>
+        <div class="meta"><span class="flag">seekable</span> <span class="flag">light register</span> <span class="flag">shared font</span> <span class="flag">shared mark</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div><div class="v"><code>--mark</code><span class="val">#ff6b1a</span><span class="role">the mark&#x27;s resting fill, held very low</span></div><div class="v"><code>--markDim</code><span class="val">0.115</span><span class="role">the mark&#x27;s colour</span></div><div class="v"><code>--light</code><span class="val">#ff6b1a</span><span class="role">the light that drifts through the mark</span></div><div class="v"><code>--lightPeak</code><span class="val">0.98</span><span class="role">the moving light</span></div><div class="v"><code>--label</code><span class="val">#ffffff</span><span class="role">label / type colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v none">none exposed</div></div>
+        <div class="path">motion-assets/glow.html · 230 lines</div>
+      </article>
+      <article class="card">
+        <div class="shot" data-src="/motion-assets/ripple.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>bonk — ripple</h3>
+        <p class="why">a disc grows; satellites multiply outward from its edge</p>
+        <div class="meta"><span class="flag">seekable</span> <span class="flag">light register</span> <span class="flag">shared font</span> <span class="flag">config block</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--ring</code><span class="val">#ff6b1a</span><span class="role">tuning value</span></div><div class="v"><code>--coreAlpha</code><span class="val">0.95</span><span class="role">tuning value</span></div><div class="v"><code>--satAlpha</code><span class="val">0.92</span><span class="role">tuning value</span></div><div class="v"><code>--coreR</code><span class="val">0.370</span><span class="role">tuning value</span></div><div class="v"><code>--satR</code><span class="val">0.048</span><span class="role">tuning value</span></div></div>
+        <div class="path">motion-assets/ripple.html · 188 lines</div>
+      </article>
+      <article class="card">
+        <div class="shot" data-src="/motion-assets/timeline.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>bonk — timeline</h3>
+        <p class="why">a scrubber runs the frame; the mark rides the playhead</p>
+        <div class="meta"><span class="flag">seekable</span> <span class="flag">light register</span> <span class="flag">shared font</span> <span class="flag">shared mark</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div><div class="v"><code>--label</code><span class="val">#ffffff</span><span class="role">label / type colour</span></div><div class="v"><code>--label-dim</code><span class="val">rgba(255,255,255,.46)</span><span class="role">label / type colour</span></div><div class="v"><code>--mark</code><span class="val">#ffffff</span><span class="role">the mark&#x27;s colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--bar</code><span class="val">#ff6b1a</span><span class="role">tuning value</span></div><div class="v"><code>--ramp</code><span class="val">rgba(255,107,26,.55)</span><span class="role">tuning value</span></div><div class="v"><code>--rail</code><span class="val">rgba(255,255,255,.14)</span><span class="role">tuning value</span></div></div>
+        <div class="path">motion-assets/timeline.html · 238 lines</div>
+      </article>
+      <article class="card">
+        <div class="shot" data-src="/motion-assets/typeon.html" data-size="1920x1080">
+          <div class="ph">click to load the live piece</div>
+        </div>
+        <h3>bonk — typeon</h3>
+        <p class="why">edge-on type wipes flat, then resolves to the mark</p>
+        <div class="meta"><span class="flag">seekable</span> <span class="flag">light register</span> <span class="flag">shared font</span> <span class="flag">shared mark</span></div>
+        <div class="grp"><h4>colour — change these</h4><div class="v"><code>--ground</code><span class="val">#000000</span><span class="role">background</span></div><div class="v"><code>--type</code><span class="val">#ffffff</span><span class="role">label / type colour</span></div><div class="v"><code>--type-dim</code><span class="val">rgba(255,255,255,.40)</span><span class="role">label / type colour</span></div><div class="v"><code>--mark</code><span class="val">#ff6b1a</span><span class="role">the mark&#x27;s colour</span></div></div>
+        <div class="grp"><h4>dials</h4><div class="v"><code>--rule</code><span class="val">#ff6b1a</span><span class="role">tuning value</span></div></div>
+        <div class="path">motion-assets/typeon.html · 252 lines</div>
+      </article></div>
+    </section>
+<script>
+document.querySelectorAll('.shot').forEach(function(s){
+  s.addEventListener('click', function(){
+    if (s.dataset.done) return;
+    var [w,h] = s.dataset.size.split('x').map(Number);
+    var f = document.createElement('iframe');
+    f.src = 'http://127.0.0.1:8765' + s.dataset.src;
+    f.loading = 'lazy';
+    f.style.transform = 'scale(' + (s.clientWidth/w) + ')';
+    f.style.transformOrigin = '0 0';
+    f.style.width = w + 'px'; f.style.height = h + 'px';
+    s.querySelector('.ph').style.display = 'none';
+    s.appendChild(f); s.dataset.done = '1';
+  });
+});
+</script>
+</body></html>

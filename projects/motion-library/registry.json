@@ -1,0 +1,264 @@
+{
+  "generated": "2026-09-27T14:04:56",
+  "generator": "scripts/scan_models.py",
+  "base": "http://127.0.0.1:8765",
+  "pieces": [
+    {
+      "file": "glow.html",
+      "rel": "motion-assets/glow.html",
+      "family": "motion-assets",
+      "url": "http://127.0.0.1:8765/projects/motion-assets/glow.html",
+      "snapshot": true,
+      "lines": 321,
+      "bytes": 12471,
+      "modelled": true,
+      "ready": true,
+      "errors": [],
+      "consoles": [],
+      "warnings": [],
+      "duration": 10,
+      "frame": {
+        "w": 1920,
+        "h": 1080,
+        "fps": 30
+      },
+      "theme": {
+        "--ground": "#000000",
+        "--mark": "#ff6b1a",
+        "--light": "#ff6b1a",
+        "--label": "#ffffff",
+        "--label-dim": "rgba(255,255,255,.42)",
+        "--accent": "#ff6b1a"
+      },
+      "params": [
+        {
+          "name": "--ground",
+          "group": "colour",
+          "type": "colour",
+          "token": "--ground",
+          "doc": "CSS custom property --ground \u2014 ?--ground= or ?ground= (the bare form unless a copy key claims it)",
+          "alias": "ground",
+          "value": "#000000"
+        },
+        {
+          "name": "--mark",
+          "group": "colour",
+          "type": "colour",
+          "token": "--mark",
+          "doc": "CSS custom property --mark \u2014 ?--mark= or ?mark= (the bare form unless a copy key claims it)",
+          "alias": "mark",
+          "value": "#ff6b1a"
+        },
+        {
+          "name": "--light",
+          "group": "colour",
+          "type": "colour",
+          "token": "--light",
+          "doc": "CSS custom property --light \u2014 ?--light= or ?light= (the bare form unless a copy key claims it)",
+          "alias": "light",
+          "value": "#ff6b1a"
+        },
+        {
+          "name": "--label",
+          "group": "colour",
+          "type": "colour",
+          "token": "--label",
+          "doc": "CSS custom property --label \u2014 ?--label= or ?label= (the bare form unless a copy key claims it)",
+          "alias": null,
+          "value": "#ffffff"
+        },
+        {
+          "name": "--label-dim",
+          "group": "colour",
+          "type": "colour",
+          "token": "--label-dim",
+          "doc": "CSS custom property --label-dim \u2014 ?--label-dim= or ?label-dim= (the bare form unless a copy key claims it)",
+          "alias": "label-dim",
+          "value": "rgba(255,255,255,.42)"
+        },
+        {
+          "name": "--accent",
+          "group": "colour",
+          "type": "colour",
+          "token": "--accent",
+          "doc": "CSS custom property --accent \u2014 ?--accent= or ?accent= (the bare form unless a copy key claims it)",
+          "alias": "accent",
+          "value": "#ff6b1a"
+        },
+        {
+          "name": "label",
+          "group": "copy",
+          "type": "text",
+          "default": "bonk",
+          "doc": "copy drawn by the piece",
+          "value": "bonk"
+        },
+        {
+          "name": "sub",
+          "group": "copy",
+          "type": "text",
+          "default": "music library",
+          "doc": "copy drawn by the piece",
+          "value": "music library"
+        },
+        {
+          "name": "kicker",
+          "group": "copy",
+          "type": "text",
+          "default": "in order",
+          "doc": "copy drawn by the piece",
+          "value": "in order"
+        },
+        {
+          "name": "w",
+          "group": "frame",
+          "type": "number",
+          "default": 1920,
+          "doc": "frame width in px",
+          "value": 1920
+        },
+        {
+          "name": "h",
+          "group": "frame",
+          "type": "number",
+          "default": 1080,
+          "doc": "frame height in px",
+          "value": 1080
+        },
+        {
+          "name": "dur",
+          "group": "timing",
+          "type": "number",
+          "default": 10,
+          "doc": "seconds the piece runs. __seek is SECONDS, always",
+          "value": 10
+        },
+        {
+          "name": "fps",
+          "group": "timing",
+          "type": "number",
+          "default": 30,
+          "doc": "frames per second the piece is composed for",
+          "value": 30
+        },
+        {
+          "name": "size",
+          "group": "type",
+          "type": "number",
+          "default": 0.0175,
+          "doc": "base type size as a fraction of the frame",
+          "value": 0.0175
+        },
+        {
+          "name": "scale",
+          "group": "type",
+          "type": "number",
+          "default": 1,
+          "doc": "ONE multiplier over every type size the piece draws",
+          "value": 1
+        },
+        {
+          "name": "tracking",
+          "group": "type",
+          "type": "number",
+          "default": 0.1,
+          "doc": "inter-letter gap as an em fraction",
+          "value": 0.1
+        },
+        {
+          "name": "markW",
+          "group": "dial",
+          "type": "number",
+          "default": 0.735,
+          "doc": "mark width as a fraction of the frame width",
+          "value": 0.735
+        },
+        {
+          "name": "markDim",
+          "group": "dial",
+          "type": "number",
+          "default": 0.115,
+          "doc": "the resting mark\u2019s fill alpha \u2014 just legible, no more",
+          "value": 0.115
+        },
+        {
+          "name": "lightPeak",
+          "group": "dial",
+          "type": "number",
+          "default": 0.98,
+          "doc": "peak alpha of the light that drifts through the mark",
+          "value": 0.98
+        },
+        {
+          "name": "lightR",
+          "group": "dial",
+          "type": "number",
+          "default": 0.92,
+          "doc": "light radius, as a multiple of the mark width",
+          "value": 0.92
+        },
+        {
+          "name": "coreR",
+          "group": "dial",
+          "type": "number",
+          "default": 0.42,
+          "doc": "the tighter core, as a multiple of the light radius",
+          "value": 0.42
+        },
+        {
+          "name": "coreA",
+          "group": "dial",
+          "type": "number",
+          "default": 0.72,
+          "doc": "alpha of that core",
+          "value": 0.72
+        }
+      ],
+      "text": {
+        "label": "bonk",
+        "sub": "music library",
+        "kicker": "in order"
+      },
+      "scenes": null,
+      "purpose": "the logo as a window \u2014 a soft light drifts through the mark",
+      "id": "glow",
+      "title": "bonk \u2014 glow",
+      "notes": "Holds rather than builds \u2014 there is no reveal, no resolve, no cut. The sweep is the whole piece. The gradient falls to roughly zero at both frame edges, so the loop wraps with no visible seam.",
+      "diff": {
+        "worst_pct": 0.1355,
+        "frames": [
+          {
+            "t": 1.0,
+            "pct": 0.0
+          },
+          {
+            "t": 2.5,
+            "pct": 0.1124
+          },
+          {
+            "t": 4.0,
+            "pct": 0.1355
+          },
+          {
+            "t": 6.0,
+            "pct": 0.1355
+          },
+          {
+            "t": 9.0,
+            "pct": 0.1309
+          }
+        ]
+      },
+      "colours": [
+        "--ground",
+        "--mark",
+        "--light",
+        "--label",
+        "--label-dim",
+        "--accent"
+      ],
+      "overridden": null,
+      "has_seek": true
+    }
+  ]
+}

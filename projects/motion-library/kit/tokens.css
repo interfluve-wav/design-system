@@ -1,0 +1,83 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   tokens.css — THE canonical Bonk motion palette.
+
+   One file, one source of truth. A piece may add its OWN tokens beside these
+   (every piece does — `--markW`, `--ring`, `--rail` …), but a *brand* colour
+   never gets a second definition anywhere else.
+
+   Brand rule (design.md, verified against the repo — GOTCHAS §4.4):
+     the brand orange is the ONLY colour on a brand surface.
+     jet black #000000–#161616 · white text · #ff6b1a. Nothing else.
+     #00ff85 Volumo green is an in-app semantic accent, never a brand surface.
+
+   Load order matters and it is deliberate:
+     tokens.css  →  the piece's own <style>  →  model.js writes inline styles.
+   Inline (setProperty on <html>) beats both, so a URL param or a live __set()
+   always wins without touching the piece's CSS. A piece's own :root is the
+   DEFAULT, not the override.
+
+   Do not add a colour here that is not in design.md. If a piece needs a
+   functional literal (a mask canvas, a threshold probe) it stays hardcoded in
+   that piece with a comment saying why — GOTCHAS §8.9. Not everything with a
+   hex in it is a theme token.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* ── raw brand ─────────────────────────────────────────────────────────── */
+  --brand-orange:      #ff6b1a;
+  --brand-orange-muted:#ffb37a;   /* muted orange text, hue 26° — same family */
+  --brand-black:       #000000;
+  --brand-black-1:     #161616;   /* the darkest brand surface that is not pure */
+  --brand-white:       #ffffff;
+
+  /* ── semantic dark register (default) ──────────────────────────────────── */
+  --ground:            var(--brand-black);
+  --ink:               var(--brand-white);
+  --accent:            var(--brand-orange);
+  --accent-soft:       var(--brand-orange-muted);
+  --label:             rgba(255,255,255,.44);
+  --label-dim:         rgba(255,255,255,.30);
+
+  /* soft fills — the documented brand glow range */
+  --accent-fill:       rgba(255,107,26,.12);
+  --accent-glow:       rgba(255,107,26,.28);
+
+  /* ── type ──────────────────────────────────────────────────────────────── */
+  /* --type-scale is a SINGLE multiplier over every type size a piece draws.
+     Change it and the whole composition rescales; nothing is hardcoded to px. */
+  --type-scale:        1;
+  --type-tracking:     0.10;      /* em fraction, so it scales with size */
+  --type-family:       'Bonk','Bonk Display',system-ui;
+  --type-mono:         'PlexMono Bonk','IBM Plex Mono',ui-monospace,monospace;
+
+  /* ── frame ─────────────────────────────────────────────────────────────── */
+  /* The aspect a piece is COMPOSED for. render.py sets the viewport to this
+     unless told otherwise. Pieces lay out from live W/H, so they are
+     resolution-independent — this is a default, not a clamp. */
+  --frame-w:           1920;
+  --frame-h:           1080;
+
+  /* ── capture ───────────────────────────────────────────────────────────── */
+  /* Strip the on-page chrome (labels, badges, counters) for a clean capture.
+     GOTCHAS §6.3: chrome was baking into every delivered GIF. */
+  --chrome:            1;
+}
+
+/* ── light register ────────────────────────────────────────────────────────
+   Not a brand surface. Used for pages/surfaces that are not the brand itself.
+   Alpha is NOT register-neutral (GOTCHAS §3.11): 12% orange on black reads;
+   12% teal on cream reads as nothing, so the light register raises its fills. */
+[data-ground="light"]{
+  --ground:            #f5f9e9;
+  --ink:               #36453b;
+  --accent:            #1e555c;
+  --accent-soft:       #1e555c;
+  --label:             #36453b;
+  --label-dim:         rgba(89,104,105,.70);
+  --accent-fill:       rgba(30,85,92,.12);
+  --accent-glow:       rgba(30,85,92,.24);
+}
+
+/* ── chrome off (capture mode) ─────────────────────────────────────────────
+   Set by render.py --no-chrome, or by ?chrome=0. */
+[data-chrome="off"] .mf-chrome{ display:none !important }
