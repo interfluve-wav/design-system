@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — timeline</title>
+<style>
+/* ── theme ─────────────────────────────────────────────────────────────────
+   All colour via custom properties. Brand rule: orange is the only colour on a
+   brand surface. Light register for surfaces that are not brand.
+   ──────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#000000;
+  --bar:#ff6b1a;
+  --ramp:rgba(255,107,26,.55);
+  --rail:rgba(255,255,255,.14);
+  --label:#ffffff;
+  --label-dim:rgba(255,255,255,.46);
+  --mark:#ffffff;
+}
+[data-ground="light"]{
+  --ground:#f5f9e9;
+  --bar:#1e555c;
+  --ramp:rgba(30,85,92,.55);
+  --rail:rgba(54,69,59,.18);
+  --label:#36453b;
+  --label-dim:rgba(89,104,105,.70);
+  --mark:#1e555c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ground)}
+body{overflow:hidden;height:100vh}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<link rel="stylesheet" href="../blueprint/public/fonts/bonk.css">
+<script src="../logo/current/bonk-mark.js"></script>
+<script>
+/* ── timeline ──────────────────────────────────────────────────────────────
+   From reference clip 05_fps-easing-diagrams (210 frames, 70 ms; 14.7 s at 2x).
+
+   THIRD reading of this clip. The first two both failed measurably, and the
+   failures are what identified the form:
+
+     v1  thin strokes, big title   -> 50.1% TB orientation, ink 1.465% vs 5.799%
+                                      (vertical text stems dominated; strokes too
+                                      thin to survive a 320x180 downscale)
+     v2  three easing curves       -> 67.6% DIAGONAL, radial -0.107 vs -0.460
+                                      (three easing curves on one plot are all
+                                      ~45 degrees -- the wrong KIND of mark)
+
+   The measured orientation of the real clip is 37.0 LR / 28.4 diag / 17.1 TB:
+   horizontally dominant WITH a strong diagonal. Combined with components at
+   17 -> 23 -> 1 and a DRAW-ON (ink rises 3.429% -> 5.799% while the box holds),
+   that is a timing ladder: many horizontal bars, diagonal ramps between them,
+   revealed left to right. Which is also what an "fps-easing" diagram is -- a
+   stagger chart -- so the form and the name now agree.
+
+   Other signatures reproduced:
+     bbox span 0.789   near full-bleed and centre-weighted (radial -0.460).
+     ink min   0.161%  it ERASES almost to nothing before drawing.
+     delta     0.0226 mean / 0.0646 max  gentle, no burst.
+     ending    17 -> 1 everything clears and leaves a single element, which is
+                       the wordmark from logo/current -- never re-typeset.
+
+   The stagger values are the motion system's own: the cadence-settle primitive
+   runs ~0.9 s per item at ~28 ms stagger, so this diagram documents real
+   behaviour rather than invented numbers.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+const cssv = (n, f) => (getComputedStyle(document.documentElement)
+  .getPropertyValue(n).trim() || f);
+
+if (new URLSearchParams(location.search).get('ground') === 'light')
+  document.documentElement.dataset.ground = 'light';
+
+const CFG = {duration: 8.0};
+
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width  = Math.round(innerWidth  * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+}
+resize();
+addEventListener('resize', () => { resize(); draw(window.__t || 0); });
+
+const clamp01 = k => k < 0 ? 0 : k > 1 ? 1 : k;
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+
+/* The motion system's cadence-settle: 0.9 s per item at 28 ms stagger. */
+const ITEMS = 18, ITEM_MS = 900, STAGGER_MS = 28;
+const SPAN_MS = ITEM_MS + (ITEMS - 1) * STAGGER_MS;   // 1.38 s total
+
+const DUR = CFG.duration;
+const T_CLEAR   = [0.10 * DUR, 0.20 * DUR];
+const T_DRAW    = [0.20 * DUR, 0.48 * DUR];
+const T_RESOLVE = [0.78 * DUR, 0.93 * DUR];
+
+function plotBox(){
+  const w = W * 0.886, h = H * 0.889;   // 0.787 of frame area, centred
+  return {x: (W - w) / 2, y: (H - h) / 2, w, h};
+}
+
+function draw(t){
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = cssv('--ground', '#000');
+  ctx.fillRect(0, 0, W, H);
+
+  const bar    = cssv('--bar', '#ff6b1a');
+  const ramp   = cssv('--ramp', 'rgba(255,107,26,.55)');
+  const rail   = cssv('--rail', 'rgba(255,255,255,.14)');
+  const lab    = cssv('--label', '#fff');
+  const labDim = cssv('--label-dim', 'rgba(255,255,255,.46)');
+  const mark   = cssv('--mark', '#fff');
+
+  const B = plotBox();
+  const F = Math.min(W, H);
+
+  const out_ = seg(t, T_CLEAR[0], T_CLEAR[1]);
+  const on   = t < T_DRAW[0] ? 0 : t < T_DRAW[1] ? seg(t, T_DRAW[0], T_DRAW[1]) : 1;
+  const gone = seg(t, T_RESOLVE[0], T_RESOLVE[1]);
+  const present = (1 - out_) * (1 - gone);
+  const figure  = on * (1 - gone);
+
+  const th = Math.max(3, F * 0.0084);        // bar thickness
+  const gapTop = B.y + B.h * 0.06;
+
+  /* ── opening: the title, ~3.4% ink, then it clears ───────────────────── */
+  if (present > 0.01){
+    ctx.globalAlpha = present;
+    ctx.textAlign = 'center';
+    ctx.font = `700 ${Math.round(F * 0.150)}px "Bonk","Bonk Display",system-ui`;
+    ctx.fillStyle = lab;
+    ctx.fillText('timing', W / 2, H * 0.50);
+    ctx.fillStyle = labDim;
+    ctx.fillRect(W * 0.30, H * 0.545, W * 0.40, Math.max(3, F * 0.0046));
+    ctx.font = `400 ${Math.round(F * 0.0262)}px "Bonk",system-ui`;
+    ctx.fillText('cadence settle', W / 2, H * 0.615);
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── the ladder: horizontal bars, revealed left to right ─────────────── */
+  if (figure > 0.01){
+    const rowH = (B.h * 0.88) / ITEMS;
+    const x0 = B.x + B.w * 0.045;
+    const xw = B.w * 0.90;
+    const barPx = (u) => x0 + u * xw;
+
+    // every bar's start and end in plot units
+    const bars = Array.from({length: ITEMS}, (_, i) => {
+      const start = (i * STAGGER_MS) / SPAN_MS;
+      const end = (i * STAGGER_MS + ITEM_MS) / SPAN_MS;
+      return {u0: start, u1: Math.min(end, 1), y: gapTop + i * rowH + rowH * 0.5};
+    });
+
+    // rails: a faint horizontal guide per row. Horizontal structure is what the
+    // clip's 37.0 LR dominance implies, so these stay even before the bars come.
+    ctx.globalAlpha = figure * 0.9;
+    ctx.fillStyle = rail;
+    for (const b of bars) ctx.fillRect(x0, b.y - th * 0.16, xw, th * 0.32);
+    ctx.globalAlpha = 1;
+
+    // the reveal sweeps left to right: ink rises while the box stays put
+    const reveal = figure;
+
+    // diagonal ramps first, then the bars -- the ramp is the item's lead-in
+    ctx.fillStyle = ramp;
+    ctx.strokeStyle = ramp;
+    ctx.lineWidth = th;
+    ctx.lineCap = 'round';
+    for (let i = 1; i < bars.length; i++){
+      const a = bars[i - 1], b = bars[i];
+      const p = clamp01((reveal - b.u0 * 0.9) / 0.24);
+      if (p <= 0) continue;
+      const ax = barPx(a.u1), ay = a.y;
+      const bx = barPx(b.u0), by = b.y;
+      ctx.globalAlpha = 0.85 * figure;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax + (bx - ax) * p, ay + (by - ay) * p);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.fillStyle = bar;
+    for (const b of bars){
+      const p = clamp01((reveal - b.u0) / 0.14);
+      if (p <= 0) continue;
+      const w = (b.u1 - b.u0) * xw * p;
+      ctx.globalAlpha = 0.94 * figure;
+      ctx.fillRect(barPx(b.u0), b.y - th * 0.5, Math.max(w, th * 0.5), th);
+      ctx.globalAlpha = 1;
+    }
+
+    // axis labels once the ladder is up
+    if (reveal > 0.85){
+      ctx.globalAlpha = (reveal - 0.85) / 0.15 * 0.95;
+      ctx.font = `600 ${Math.round(F * 0.0204)}px "Bonk",system-ui`;
+      ctx.fillStyle = labDim;
+      ctx.textAlign = 'left';
+      ctx.fillText('28 ms stagger', x0, B.y + B.h * 0.995);
+      ctx.textAlign = 'right';
+      ctx.fillText('0.9 s', x0 + xw, B.y + B.h * 0.995);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* ── resolve: everything clears, ONE element is left ─────────────────── */
+  const r = seg(t, T_RESOLVE[0], T_RESOLVE[1]);
+  if (r > 0.01 && window.BONK_MARK){
+    const M = window.BONK_MARK;
+    const gw = F * 0.30, s = gw / M.width, gh = M.height * s;
+    const gx = (W - gw) / 2, gy = (H - gh) / 2;
+    ctx.globalAlpha = r;
+    ctx.translate(gx, gy);
+    ctx.scale(s, s);
+    ctx.translate(-M.origin.x, -M.origin.y);
+    ctx.fillStyle = mark;
+    ctx.fill(new Path2D(M.d));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ── deterministic capture ───────────────────────────────────────────────── */
+window.__duration = DUR;
+window.__seek = s => { window.__t = s; draw(s); };
+window.__ready = true;
+draw(0);
+</script>
+</body>
+</html>

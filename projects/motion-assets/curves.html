@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — curves</title>
+<style>
+/* ── theme ─────────────────────────────────────────────────────────────────
+   Every colour is a custom property. Brand rule: orange is the only colour on
+   a brand surface, so the plot is orange, labels white, ground black. The light
+   register exists for surfaces that are not brand surfaces.
+   ──────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#000000;
+  --curve:#ff6b1a;
+  --curve-dim:rgba(255,107,26,.42);
+  --hairline:rgba(255,255,255,.30);
+  --tick:rgba(255,255,255,.20);
+  --label:#ffffff;
+  --label-dim:rgba(255,255,255,.52);
+  --mark:#ffffff;
+  --boxFrac:0.789;      /* clip 05 bbox span 0.789 of frame */
+}
+[data-ground="light"]{
+  --ground:#f5f9e9;
+  --curve:#1e555c;
+  --curve-dim:rgba(30,85,92,.40);
+  --hairline:rgba(54,69,59,.42);
+  --tick:rgba(54,69,59,.24);
+  --label:#36453b;
+  --label-dim:rgba(89,104,105,.72);
+  --mark:#1e555c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ground)}
+body{overflow:hidden;height:100vh}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<link rel="stylesheet" href="../blueprint/public/fonts/bonk.css">
+<script src="../logo/current/bonk-mark.js"></script>
+<script>
+/* ── curves ────────────────────────────────────────────────────────────────
+   From reference clip 05_fps-easing-diagrams (210 frames, 70 ms; 14.7 s at 2x).
+   This is the one clip of the nine whose signature is a DRAW-ON:
+
+     motion        ink RISES while the bounding box stays put. Ink grows from
+                   3.429% to a peak of 5.799% at phase 0.39 without the subject
+                   getting bigger. That is a stroke being laid down, not a scale.
+     ink min       0.161%  it first ERASES almost to nothing, then draws. So the
+                   sequence is present -> cleared -> drawn on, not drawn from zero.
+     components    17 -> 23 -> 1
+                   starts as ~17 separate pieces (axes, ticks, labels), peaks at
+                   23 mid-draw (write-on strokes are briefly more numerous than
+                   the finished figure), and ends as ONE connected element.
+     bbox span     0.789   a wide plot, not a square or a centred cluster.
+     orientation   37.0 LR / 28.4 diag
+                   horizontal axes plus diagonal curve segments. No radial or
+                   vertical structure, unlike clip 08 (TB 29.0, letterform stems).
+     radial corr   -0.460  centre-weighted, so the plot is centred, not full-bleed.
+     delta         0.0226 mean / 0.0646 max
+                   gentle. The calmest change profile of the drawing clips: this
+                   is a diagram, not a burst.
+
+   The ending is the useful part for us: 17 pieces resolving to 1. So the figure
+   clears and leaves the wordmark -- the logo is loaded from logo/current, the
+   canonical module generated from the asset, never re-typeset.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+const cssv = (n, f) => (getComputedStyle(document.documentElement)
+  .getPropertyValue(n).trim() || f);
+
+const CFG = { duration: 8.0 };
+
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width  = Math.round(innerWidth  * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+}
+resize();
+addEventListener('resize', () => { resize(); draw(window.__t || 0); });
+
+// light register via ?ground=light
+if (new URLSearchParams(location.search).get('ground') === 'light')
+  document.documentElement.dataset.ground = 'light';
+
+const clamp01 = k => k < 0 ? 0 : k > 1 ? 1 : k;
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+
+/* The three easings the motion system actually uses, plotted as functions. */
+const EASES = [
+  {name:'expo-out',      fn:k => k <= 0 ? 0 : k >= 1 ? 1 : 1 - Math.pow(2, -10 * k)},
+  {name:'power4-out',    fn:k => 1 - Math.pow(1 - k, 4)},
+  {name:'in-out-cubic',  fn:k => k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3) / 2},
+];
+
+const DUR = CFG.duration;
+// clip 05 timeline: present -> cleared -> drawn on -> settle -> resolve to one
+const T_CLEAR   = [0.10, 0.20].map(f => f * DUR);
+const T_DRAW    = [0.20, 0.45].map(f => f * DUR);
+const T_RESOLVE = [0.75, 0.92].map(f => f * DUR);
+
+function plotBox(){
+  const m = Math.min(W, H);
+  const half = Math.sqrt(0.789 * W * H) / 2;   // bbox span is a fraction of AREA
+  const w = Math.min(half * 2, W * 0.80), h = Math.min(half * 1.42, H * 0.55);
+  return {x: (W - w) / 2, y: (H - h) / 2, w, h};
+}
+
+/* A polyline's drawing progress: reveal only the first `k` of the path. */
+function strokePath(pts, k, colour, width, alpha){
+  const n = pts.length;
+  const upto = Math.max(1, Math.floor(k * (n - 1)));
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i <= upto; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  if (k < 1 && upto < n - 1){          // partial final segment
+    const f = k * (n - 1) - upto;
+    const [ax, ay] = pts[upto], [bx, by] = pts[upto + 1] || pts[upto];
+    ctx.lineTo(ax + (bx - ax) * f, ay + (by - ay) * f);
+  }
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = width;
+  ctx.globalAlpha = alpha;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function draw(t){
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = cssv('--ground', '#000');
+  ctx.fillRect(0, 0, W, H);
+
+  const curve = cssv('--curve', '#ff6b1a');
+  const dim = cssv('--curve-dim', 'rgba(255,107,26,.42)');
+  const hair = cssv('--hairline', 'rgba(255,255,255,.30)');
+  const tick = cssv('--tick', 'rgba(255,255,255,.20)');
+  const lab = cssv('--label', '#fff');
+  const labDim = cssv('--label-dim', 'rgba(255,255,255,.52)');
+  const mark = cssv('--mark', '#fff');
+
+  const B = plotBox();
+  const px = (u) => B.x + u * B.w;         // 0..1 -> pixels across
+  const py = (v) => B.y + (1 - v) * B.h;   // 0..1 -> pixels up
+
+  // ── phase weights ───────────────────────────────────────────────────────
+  const out_  = seg(t, T_CLEAR[0], T_CLEAR[1]);          // the opening clears
+  const on    = t < T_DRAW[0] ? 0 :                  // strokes appear
+                t < T_DRAW[1] ? seg(t, T_DRAW[0], T_DRAW[1]) : 1;
+  const gone  = seg(t, T_RESOLVE[0], T_RESOLVE[1]);      // figure resolves away
+  const present = (1 - out_) * (1 - gone);               // the opening title
+  const figure  = on * (1 - gone);                       // the drawn plot
+  const settle  = t > T_DRAW[1] ? 1 : 0;
+
+  const fx = Math.round(Math.min(W, H) * 0.0182);
+
+  /* ── the opening: a title block, ~17 pieces. It clears. ───────────────── */
+  if (present > 0.01){
+    ctx.globalAlpha = present;
+    ctx.font = `700 ${Math.round(fx * 1.9)}px "Bonk","Bonk Display",system-ui`;
+    ctx.fillStyle = lab;
+    ctx.textAlign = 'center';
+    ctx.fillText('motion', W / 2, H / 2 - fx * 0.6);
+    ctx.font = `400 ${Math.round(fx * 0.86)}px "Bonk",system-ui`;
+    ctx.fillStyle = labDim;
+    ctx.fillText('three easings', W / 2, H / 2 + fx * 1.5);
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── the plot: axes, ticks, then three curves drawn on ────────────────── */
+  if (figure > 0.01){
+    // axes first, as two separate strokes (they are 2 of the 17 pieces)
+    const axK = clamp01(figure * 2.4);
+    ctx.globalAlpha = figure;
+    strokePath([[px(0), py(0)], [px(1), py(0)]], axK, hair, Math.max(1, dpr), 0.9);
+    strokePath([[px(0), py(0)], [px(0), py(1)]], axK, hair, Math.max(1, dpr), 0.9);
+    ctx.globalAlpha = 1;
+
+    // ticks: 5 along each axis
+    ctx.globalAlpha = figure * 0.9;
+    for (let i = 0; i <= 5; i++){
+      const u = i / 5;
+      if (u <= axK){
+        ctx.fillStyle = tick;
+        ctx.fillRect(px(u) - dpr * 0.5, py(0), dpr, fx * 0.36);
+        ctx.fillRect(px(0) - fx * 0.36, py(u) - dpr * 0.5, fx * 0.36, dpr);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // three curves, laid down one after another
+    const N = 96;
+    EASES.forEach((e, i) => {
+      const k = clamp01((figure - 0.28 - i * 0.20) / 0.34);
+      if (k <= 0) return;
+      const pts = [];
+      for (let j = 0; j <= N; j++){
+        const u = j / N;
+        pts.push([px(u), py(e.fn(u))]);
+      }
+      strokePath(pts, k, curve, Math.max(1.4, dpr * 2.1), i === 0 ? 1 : 0.62);
+
+      // label at the curve's right end, appears as the stroke completes
+      if (k > 0.82){
+        const la = clamp01((k - 0.82) / 0.18);
+        ctx.globalAlpha = la * 0.95;
+        ctx.font = `600 ${Math.round(fx * 0.74)}px "Bonk",system-ui`;
+        ctx.fillStyle = i === 0 ? lab : labDim;
+        ctx.textAlign = 'left';
+        ctx.fillText(e.name, px(1) + fx * 0.6, py(e.fn(1)) + (i - 1) * fx * 0.1);
+        ctx.globalAlpha = 1;
+      }
+
+      // a marker rides the leading edge of the active curve
+      if (settle && k >= 1 && i === EASES.length - 1){
+        const travel = (t - T_DRAW[1]) / (T_RESOLVE[0] - T_DRAW[1]);
+        const u = clamp01(travel) % 1;
+        ctx.beginPath();
+        ctx.arc(px(u), py(e.fn(u)), Math.max(2, fx * 0.19), 0, Math.PI * 2);
+        ctx.fillStyle = curve;
+        ctx.globalAlpha = 0.9 * figure;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    });
+  }
+
+  /* ── the resolve: everything clears, ONE element is left ─────────────── */
+  const r = seg(t, T_RESOLVE[0], T_RESOLVE[1]);
+  if (r > 0.01 && window.BONK_MARK){
+    const M = window.BONK_MARK;
+    const m = Math.min(W, H);
+    const s = (m * 0.20) / M.width;
+    const gw = (m * 0.20), gh = M.height * s;
+    const gx = (W - gw) / 2, gy = (H - gh) / 2;
+    ctx.globalAlpha = r;
+    ctx.translate(gx, gy);
+    ctx.scale(s, s);
+    ctx.translate(-M.origin.x, -M.origin.y);
+    ctx.fillStyle = mark;
+    ctx.fill(new Path2D(M.d));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+
+    // and a quiet label under it
+    if (r > 0.55){
+      ctx.globalAlpha = (r - 0.55) / 0.45;
+      ctx.font = `600 ${Math.round(fx * 0.80)}px "Bonk",system-ui`;
+      ctx.fillStyle = labDim;
+      ctx.textAlign = 'center';
+      ctx.fillText('bonk', W / 2, gy + gh + fx * 2.2);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+/* ── deterministic capture ───────────────────────────────────────────────── */
+window.__duration = DUR;
+window.__seek = s => { window.__t = s; draw(s); };
+window.__ready = true;
+draw(0);
+</script>
+</body>
+</html>

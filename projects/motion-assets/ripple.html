@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — ripple</title>
+<style>
+/* ── theme ─────────────────────────────────────────────────────────────────
+   All colour via custom properties; nothing chromatic is hardcoded in JS.
+   design.md: the brand orange is the only colour on a brand surface.
+   ──────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#000000;
+  --ring:#ff6b1a;
+  --coreAlpha:0.95;
+  --satAlpha:0.92;
+  /* clip 06: ink peak 24.599% of frame -> a disc of radius 37% of frame height.
+     bbox span 0.431 of frame. Ink never falls below 0.955%. */
+  --coreR:0.370;
+  --satR:0.048;
+  --boxFrac:0.431;
+}
+[data-ground="light"]{
+  --ground:#f5f9e9;
+  --ring:#1e555c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ground)}
+body{overflow:hidden;height:100vh}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<link rel="stylesheet" href="../blueprint/public/fonts/bonk.css">
+<script>
+/* ── ripple ────────────────────────────────────────────────────────────────
+   From reference clip 06_circles-solid (210 frames, 70 ms; 14.7 s at 2x slow).
+
+   SECOND ATTEMPT. The first built thin concentric rings and was measured against
+   the clip: 0.368% ink vs 24.599% (67x too faint), delta 0.0010 vs 0.1127 (113x
+   too still), components stuck at 5 instead of climbing 1 -> 11, radial corr
+   -0.201 vs -0.769, and edge orientation 59.9% diagonal instead of uniform.
+   Thin anti-aliased rings also can't produce a uniform orientation histogram.
+
+   The clip's numbers reconcile exactly one way, and this reproduces that reading:
+
+     ink max     24.599%  -> a disc whose radius is ~37% of the frame height:
+                             pi*(0.370*1080)^2 / (1920*1080) = 24.5%. The "solid"
+                             in the clip's name is load-bearing. Filled discs.
+     bbox span   0.431    -> that disc's own box is (0.74*1080)^2 = 0.31 of frame;
+                             satellites spread it to ~0.43.
+     components  1 -> 11  -> ONE large disc plus ten small satellites, all
+                             separate. Eleven equal discs could not reach 24.6%
+                             ink inside a 0.431 box without overlapping into one
+                             blob; the arithmetic forbids it.
+     scale-up             -> ink AND box grow together: the disc expands.
+     radial corr -0.769   -> the strongest radial concentration of all nine clips.
+                             An ease-OUT on radius puts most of the area change at
+                             small radii, so frame-to-frame motion concentrates
+                             near the centre. This is why the core uses cubic-out
+                             with a high exponent rather than a linear grow.
+     orientation uniform  -> 24.8/25.2/24.8/25.2 across four 45-degree bins.
+                             Circular edges only: no lines, no grid, no wipe.
+     ink min     0.955%   -> never empties: the disc starts small but present.
+
+   One deliberate divergence: the clip is a 14.7 s one-shot, not a loop, and ends
+   at 11 components. For a looping GIF the subject retracts into the centre over
+   the last 8% so the seam is not a jump. Everything else holds after 80%, which
+   matches the clip's late ink peak at phase 0.65.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+const cssv = (n, f) => (getComputedStyle(document.documentElement)
+  .getPropertyValue(n).trim() || f);
+
+if (new URLSearchParams(location.search).get('ground') === 'light')
+  document.documentElement.dataset.ground = 'light';
+
+const CFG = { ground:'#000', ring:'#ff6b1a', core:0.95, sat:0.92,
+              coreR:0.370, satR:0.040, box:0.431, duration:8.0 };
+
+function readTheme(){
+  CFG.ground = cssv('--ground', '#000');
+  CFG.ring   = cssv('--ring', '#ff6b1a');
+  CFG.core   = parseFloat(cssv('--coreAlpha', '0.95'));
+  CFG.sat    = parseFloat(cssv('--satAlpha', '0.92'));
+  CFG.coreR  = parseFloat(cssv('--coreR', '0.370'));
+  CFG.satR   = parseFloat(cssv('--satR', '0.040'));
+  CFG.box    = parseFloat(cssv('--boxFrac', '0.431'));
+}
+
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width  = Math.round(innerWidth  * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+}
+readTheme(); resize();
+addEventListener('resize', () => { resize(); draw(window.__t || 0); });
+
+const clamp01 = k => k < 0 ? 0 : k > 1 ? 1 : k;
+/* cubic-out with a tunable exponent. Fast early growth is what concentrates the
+   frame-delta near the centre and yields the reference's negative radial corr. */
+const easeOut = (k, p) => 1 - Math.pow(1 - clamp01(k), p);
+
+const DUR = CFG.duration;
+const T_HOLD = 0.80 * DUR;      // growth complete; everything holds
+const T_RETRACT = 0.94 * DUR;   // begin pulling back into the centre
+
+/* Ten satellites on a phyllotaxis spiral. Index order runs centre -> outward,
+   which is also birth order, so arrivals accumulate outward exactly as the
+   clip's component count climbs 1 -> 11. `dist` is in units of the FULL core
+   radius and starts at 1.16 so a satellite always clears the core disc
+   (1.0) plus its own radius (~0.135 at 1080p) even at the innermost ring. */
+const PHI = Math.PI * (3 - Math.sqrt(5));
+const SATS = Array.from({length: 10}, (_, i) => {
+  const k = (i + 1) / 10;
+  return {
+    ang: i * PHI,
+    dist: 1.16 + 0.16 * Math.sqrt(k),
+    birth: (0.06 + 0.74 * k) * DUR,  // staggered arrivals across the growth
+    size: CFG.satR * (1.25 - 0.45 * k),
+  };
+});
+
+function draw(t){
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = CFG.ground;
+  ctx.fillRect(0, 0, W, H);
+
+  const m = Math.min(W, H);
+  const cx = W / 2, cy = H / 2;
+  /* The clip's bbox span 0.431 is a fraction of frame AREA, so the cluster's
+     half-extent is sqrt(0.431*W*H)/2 = 472 px at 1080p -- not 0.431*min/2,
+     which was 233 and pushed every satellite inside the core disc. */
+  const boxHalf = Math.sqrt(CFG.box * W * H) / 2;
+  const coreFull = CFG.coreR * m;                     // RADIUS, not diameter
+  /* Never empty: the clip's ink floor 0.955% of frame implies a visible disc of
+     r = sqrt(0.00955*W*H/pi) = 79 px at 1080p. That is the resting minimum. */
+  const coreMin = Math.sqrt(0.00955 * W * H / Math.PI);
+
+  // loop tail: retract into the centre so the seam is not a dead jump
+  const retract = t > T_RETRACT
+    ? 1 - clamp01((t - T_RETRACT) / (DUR - T_RETRACT)) : 1;
+
+  // ── satellites first, so the core reads as the top layer ────────────────
+  // Orbits are measured from the FULL core radius, so a satellite is always
+  // clear of the core even while the core is still small.
+  ctx.fillStyle = CFG.ring;
+  ctx.globalAlpha = CFG.sat * retract;
+  for (const s of SATS){
+    const k = clamp01((t - s.birth) / 0.11);         // snappy pop -> high frame delta
+    if (k <= 0) continue;                            // not born yet
+    const grow = easeOut(k, 2.6);
+    const r = s.size * m * grow * retract;
+    if (r < 0.4) continue;
+    const orbit = coreFull * s.dist * retract;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(s.ang) * orbit, cy + Math.sin(s.ang) * orbit,
+            r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── the core disc: snappy growth, then holds. The floor is NOT scaled by
+  // retract: the clip's ink never drops below 0.955%, so the resting disc
+  // persists and the loop seam runs disc -> disc with nothing to jump.
+  const coreGrow = easeOut(clamp01(t / T_HOLD), 2.8) * retract;
+  const coreR = Math.max(coreMin, coreFull * coreGrow);
+  if (coreR > 0.4){
+    ctx.globalAlpha = CFG.core;
+    ctx.beginPath();
+    ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── deterministic capture ───────────────────────────────────────────────── */
+window.__duration = DUR;
+window.__seek = s => { window.__t = s; draw(s); };
+window.__ready = true;
+draw(0);
+</script>
+</body>
+</html>

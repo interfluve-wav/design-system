@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — glow</title>
+<!-- kit first: tokens.css loads BEFORE the piece's own :root, so the piece's
+     values are the defaults and the kit's inline writes are the overrides -->
+<link rel="stylesheet" href="../motion-library/kit/tokens.css">
+<style>
+/* ── theme ─────────────────────────────────────────────────────────────────
+   All colour via custom properties. Nothing chromatic is hardcoded in JS.
+   design.md: the brand orange is the only colour on a brand surface.
+   ──────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#000000;
+  --mark:#ff6b1a;              /* the mark's resting fill, held very low */
+  --markDim:0.115;
+  --light:#ff6b1a;             /* the light that drifts through the mark */
+  --lightPeak:0.98;
+  --label:#ffffff;
+  --label-dim:rgba(255,255,255,.42);
+  --accent:#ff6b1a;
+  --markW:0.735;               /* mark width as a fraction of the frame width */
+  --duration:10;
+}
+[data-ground="light"]{
+  --ground:#f5f9e9;
+  --mark:#1e555c;
+  --light:#1e555c;
+  --label:#36453b;
+  --label-dim:rgba(89,104,105,.70);
+  --accent:#1e555c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ground)}
+body{overflow:hidden;height:100vh}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<link rel="stylesheet" href="../blueprint/public/fonts/bonk.css">
+<script src="../logo/current/bonk-mark.js"></script>
+<script src="../motion-library/kit/model.js"></script>
+<script src="../motion-library/kit/type.js"></script>
+<script>
+/* ── glow ──────────────────────────────────────────────────────────────────
+   A different idea, after the reference-distilled pieces were rejected twice.
+
+   The mark is not revealed, wiped, scaled or drawn on. It simply SITS there on
+   black, filled with the brand orange at 11.5% -- just legible, no more. A soft
+   wide light drifts horizontally through the frame, and because it is clipped to
+   the letterforms it only ever exists INSIDE the mark. So the mark appears to be
+   lit from within, and its shape is read from where the light is allowed to fall.
+
+   Why this shape of idea:
+     - it treats the logo as the subject for the whole piece instead of a payoff
+       arriving at the end, which is what made the previous type render feel like
+       it was rushing its own ending
+     - the only motion is a constant-speed horizontal drift, so nothing is abrupt
+       and there is no moment where the eye waits for something to finish
+     - it holds. The light drift IS the piece; there is no build, no resolve, no
+       crossfade. Ten seconds of a mark being quietly lit.
+     - the light's gradient falls to roughly zero at both frame edges, so the
+       loop wraps with no visible seam and no dead frames.
+
+   Composition follows the taste notes: label overlay bottom-left on a dark
+   ground, an italic accent top-right, generous negative space, no rules, no
+   dividers, no borders.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+const cssv = (n, f) => (getComputedStyle(document.documentElement)
+  .getPropertyValue(n).trim() || f);
+
+if (new URLSearchParams(location.search).get('ground') === 'light')
+  document.documentElement.dataset.ground = 'light';
+
+/* ══ THE MODEL ═════════════════════════════════════════════════════════════
+   Everything a human might want to change lives in this one block: the copy it
+   draws, its colour surface, its type size, its frame, its timing. Nothing
+   below this block hardcodes a string, a colour or a size — if you want to
+   change something, change it here or pass it in the URL:
+
+     ?label=bonk&sub=library&kicker=in%20order      copy
+     ?mark=%2300ff85&ground=light                   colour
+     ?scale=1.4&size=0.02&tracking=0.14             type
+     ?w=1080&h=1080&dur=6&fps=30                    frame + timing
+     ?markW=0.85&markDim=0.2&lightPeak=0.7          dials
+
+   Full spec of what this becomes: projects/motion-library/README.md
+   ═════════════════════════════════════════════════════════════════════════ */
+const CFG = {};                       // read-through cache, filled by readTheme()
+
+const MODEL = MotionModel.define({
+  id:      'glow',
+  title:   'bonk — glow',
+  family:  'motion-assets',
+  purpose: 'the logo as a window — a soft light drifts through the mark',
+
+  frame:    {w: 1920, h: 1080},   // composed for this; render.py uses it as the default viewport
+  duration: 10,
+  fps:      30,
+
+  /* the COMPLETE colour surface. A theme audit has to flip every one of these
+     or the test lies (GOTCHAS §8.16) — so the list is here, not implied. */
+  colours: ['--ground', '--mark', '--light', '--label', '--label-dim', '--accent'],
+
+  /* every user-visible string this piece can draw */
+  text: {
+    label:  'bonk',
+    sub:    'music library',
+    kicker: 'in order',
+  },
+
+  type: { size: 0.0175, scale: 1, tracking: 0.10 },
+
+  dials: {
+    markW:     0.735,
+    markDim:   0.115,
+    lightPeak: 0.98,
+    lightR:    0.92,
+    coreR:     0.42,
+    coreA:     0.72,
+  },
+  dialDocs: {
+    markW:     'mark width as a fraction of the frame width',
+    markDim:   'the resting mark\u2019s fill alpha — just legible, no more',
+    lightPeak: 'peak alpha of the light that drifts through the mark',
+    lightR:    'light radius, as a multiple of the mark width',
+    coreR:     'the tighter core, as a multiple of the light radius',
+    coreA:     'alpha of that core',
+  },
+
+  fonts: ["700 40px 'Bonk'", "500 40px 'Bonk'", "italic 400 40px 'Bonk'"],
+
+  notes: 'Holds rather than builds — there is no reveal, no resolve, no cut. ' +
+         'The sweep is the whole piece. The gradient falls to roughly zero at ' +
+         'both frame edges, so the loop wraps with no visible seam.',
+});
+
+function readTheme(){
+  CFG.duration  = MODEL.params.dur;
+  CFG.markW     = MODEL.params.markW;
+  CFG.markDim   = MODEL.params.markDim;
+  CFG.lightPeak = MODEL.params.lightPeak;
+  CFG.lightR    = MODEL.params.lightR;
+  CFG.coreR     = MODEL.params.coreR;
+  CFG.coreA     = MODEL.params.coreA;
+  CFG.typeSize  = MODEL.params.size * MODEL.params.scale;
+  CFG.ground    = cssv('--ground', '#000');
+  CFG.mark      = cssv('--mark', '#ff6b1a');
+  CFG.light     = cssv('--light', '#ff6b1a');
+  CFG.label     = cssv('--label', '#fff');
+  CFG.labelDim  = cssv('--label-dim', 'rgba(255,255,255,.42)');
+  CFG.accent    = cssv('--accent', '#ff6b1a');
+}
+readTheme();
+
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width  = Math.round(innerWidth  * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+}
+resize();
+addEventListener('resize', () => { resize(); readTheme(); draw(window.__t || 0); });
+
+const clamp01 = k => k < 0 ? 0 : k > 1 ? 1 : k;
+/* the light rises and falls smoothly; no overshoot, nothing abrupt */
+const smooth = k => { k = clamp01(k); return k * k * (3 - 2 * k); };
+
+const DUR0 = CFG.duration;   /* re-read per draw: ?dur= must land live */
+
+function markGeo(){
+  const M = window.BONK_MARK;
+  const gw = W * CFG.markW;
+  const s = gw / M.width;
+  const gh = M.height * s;
+  return {M, s, gw, gh, gx: (W - gw) / 2, gy: (H - gh) / 2};
+}
+
+function draw(t){
+  const DUR = CFG.duration;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = CFG.ground;
+  ctx.fillRect(0, 0, W, H);
+
+  if (!window.BONK_MARK) return;
+  const {M, s, gw, gh, gx, gy} = markGeo();
+  const F = Math.min(W, H);
+
+  /* the mark arrives slowly and leaves by the same route, so the loop closes.
+     Fading only IN means the last frame is the full composition while the first
+     is black -- the capture measured a 3.36 mean-luma seam against a 0.106
+     per-frame delta, i.e. a hard pop every cycle rather than a wrap. */
+  const IN  = DUR * 0.22;
+  const OUT = DUR * 0.14;
+  const present = smooth(t / IN) * (1 - smooth((t - (DUR - OUT)) / OUT));
+
+  /* ── 1. the resting mark, dim ─────────────────────────────────────────── */
+  const path = new Path2D();
+  path.addPath(new Path2D(M.d),
+    new DOMMatrix().translate(gx, gy).scale(s, s)
+                   .translate(-M.origin.x, -M.origin.y));
+
+  ctx.save();
+  ctx.globalAlpha = CFG.markDim * present;
+  ctx.fillStyle = CFG.mark;
+  ctx.fill(path);
+  ctx.restore();
+
+  /* ── 2. the light, additive and clipped to the letterforms ───────────── */
+  // a constant-speed sweep, so the motion never changes pace
+  const phase = (t / DUR) % 1;
+  const lightX = -0.35 * W + phase * 1.70 * W;
+  const lightY = H * 0.46;
+  const lightR = Math.max(gw * CFG.lightR, F * 0.55);
+
+  ctx.save();
+  ctx.clip(path);
+  ctx.globalCompositeOperation = 'lighter';
+
+  // pulse the intensity gently along the loop so the sweep breathes
+  const breath = 0.86 + 0.14 * Math.sin(phase * Math.PI * 2);
+  const g = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, lightR);
+  g.addColorStop(0.00, CFG.light);
+  g.addColorStop(0.34, CFG.light);
+  g.addColorStop(0.66, CFG.light);
+  g.addColorStop(1.00, CFG.ground);
+  ctx.globalAlpha = CFG.lightPeak * breath * present;
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  /* a second, tighter core so the sweep has a centre of gravity rather than
+     reading as an even wash */
+  ctx.save();
+  ctx.clip(path);
+  ctx.globalCompositeOperation = 'lighter';
+  const core = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, lightR * CFG.coreR);
+  core.addColorStop(0.0, CFG.light);
+  core.addColorStop(1.0, CFG.ground);
+  ctx.globalAlpha = CFG.coreA * breath * present;
+  ctx.fillStyle = core;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  /* ── 3. labels: overlay bottom-left, italic accent top-right ─────────── */
+  const fx = F * CFG.typeSize;
+  const labIn = smooth((t - DUR * 0.16) / (DUR * 0.22))
+              * (1 - smooth((t - (DUR - OUT)) / OUT));
+
+  if (labIn > 0.01){
+    const fam  = '"Bonk","Bonk Display",system-ui';
+    const trk  = MODEL.params.tracking;
+    const left = F * 0.062;
+    const right= W - F * 0.062;
+
+    /* Type goes through MotionType, not fillText: canvas ignores CSS
+       letter-spacing, so tracking and per-glyph reveals only exist if each
+       glyph is placed by measurement (GOTCHAS §8.12). */
+    const line = (str, o) => MotionType.fit(ctx, str, {
+      family: fam, weight: o.weight, style: o.style,
+      size: fx * o.k, tracking: trk, maxW: W * 0.45,
+    });
+    /* MotionType.draw centres on x, so anchor by half the measured line */
+    const put = (L, x, y, anchor) =>
+      MotionType.draw(ctx, L,
+        anchor === 'right' ? x - L.total / 2 : x + L.total / 2,
+        y, {baseline: 'alphabetic'});
+
+    ctx.globalAlpha = labIn;
+
+    ctx.fillStyle = CFG.label;
+    put(line(MODEL.params.label, {weight:700, k:1.08}), left, H - F * 0.072, 'left');
+
+    ctx.fillStyle = CFG.labelDim;
+    put(line(MODEL.params.sub, {weight:400, k:1.08}), left, H - F * 0.040, 'left');
+
+    ctx.globalAlpha = labIn * 0.88;
+    ctx.fillStyle = CFG.accent;
+    put(line(MODEL.params.kicker, {weight:400, style:'italic', k:1.16}),
+        right, F * 0.105, 'right');
+
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ── deterministic capture ───────────────────────────────────────────────── */
+/* __duration, __seek, __theme, __rebuild, __applyTheme, __params and __set all
+   come from the kit now — ONE implementation for every piece, so a capture
+   script never needs to know which piece it is driving. */
+MODEL.onApply(() => readTheme());   // re-read the theme BEFORE the kit's repaint
+MODEL.renderAt(t => draw(t));       // the kit owns __seek from here
+
+/* Live playback. __seek cancels this loop (GOTCHAS §2.4) so a capture stays
+   frame-exact; ?loop=0 turns it off. */
+if (new URLSearchParams(location.search).get('loop') !== '0'){
+  const t0 = performance.now();
+  let raf = 0;
+  const tick = () => {
+    window.__t = ((performance.now() - t0) / 1000) % Math.max(0.001, CFG.duration);
+    draw(window.__t);
+    raf = requestAnimationFrame(tick);
+  };
+  tick();
+  window.__stopLoop = () => { cancelAnimationFrame(raf); raf = 0; };
+}
+
+/* The font load that used to live here is now the kit's __ready, driven by the
+   `fonts:` list in the model block above. A canvas ctx.font reference does NOT
+   trigger an @font-face download (GOTCHAS §3.10), so the faces have to be
+   named explicitly or every label silently renders in the fallback. */
+
+</script>
+</body>
+</html>

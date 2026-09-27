@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bonk — typeon</title>
+<style>
+/* ── theme ─────────────────────────────────────────────────────────────────
+   All colour via custom properties. Brand rule: orange is the only colour on a
+   brand surface. Light register for surfaces that are not brand.
+   ──────────────────────────────────────────────────────────────────────── */
+:root{
+  --ground:#000000;
+  --type:#ffffff;
+  --rule:#ff6b1a;
+  --type-dim:rgba(255,255,255,.40);
+  --mark:#ff6b1a;
+}
+[data-ground="light"]{
+  --ground:#f5f9e9;
+  --type:#36453b;
+  --rule:#1e555c;
+  --type-dim:rgba(89,104,105,.70);
+  --mark:#1e555c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ground)}
+body{overflow:hidden;height:100vh}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<link rel="stylesheet" href="../blueprint/public/fonts/bonk.css">
+<script src="../logo/current/bonk-mark.js"></script>
+<script>
+/* ── typeon ────────────────────────────────────────────────────────────────
+   From reference clip 05 (210 frames, 70 ms; 14.7 s at 2x). THREE failed
+   attempts preceded this, and between them they identified the form:
+
+     v1  thin strokes + big title    ink 1.465% vs 5.799%; 50.1% in the 90 bin
+     v2  three easing curves         ink ok, but 67.6% DIAGONAL; radial -0.107
+     v3  horizontal bar ladder       ink 18.8% (over); 94.6% DIAGONAL
+     ->  type, wiped on
+
+   The measurements only make sense once the orientation bins are read correctly.
+   The histograms are EDGE NORMALS, not edge directions: bin 0 means a horizontal
+   gradient, which is a VERTICAL edge. So the clip's "37.0 LR / 28.4 diag / 17.1
+   TB" is really vertical edges 37% and diagonal edges 46%. Vertical edge families
+   plus diagonal families is letterform structure -- stems and diagonals -- and the
+   rest of the clip agrees:
+
+     motion         ink RISES 3.429% -> 5.799% at phase 0.39 with the box fixed:
+                    a reveal filling in, not a scale-up.
+     ink min        0.161%  it erases almost to nothing first, then writes on.
+     components     17 -> 23 -> 1
+                    a phrase (letters are separate components), briefly more
+                    numerous mid-wipe, resolving to ONE element.
+     bbox span      0.789   near full-bleed and centre-weighted (radial -0.460).
+     delta          0.0226 mean / 0.0646 max   gentle; a wipe, not a burst.
+
+   Letters are wiped on left to right with a per-letter clip, so the ink rises
+   while the bounding box holds -- which is precisely the clip's draw-on. The
+   phrase then clears and leaves the wordmark from logo/current, so 17 -> 1 runs
+   through the real mark rather than a re-typeset one.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+const cssv = (n, f) => (getComputedStyle(document.documentElement)
+  .getPropertyValue(n).trim() || f);
+
+if (new URLSearchParams(location.search).get('ground') === 'light')
+  document.documentElement.dataset.ground = 'light';
+
+const CFG = {duration: 8.0};
+
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width  = Math.round(innerWidth  * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+}
+resize();
+addEventListener('resize', () => { resize(); draw(window.__t || 0); });
+
+const clamp01 = k => k < 0 ? 0 : k > 1 ? 1 : k;
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+
+const LINES = ['your music', 'library'];
+const DUR = CFG.duration;
+const T_CLEAR   = [0.09 * DUR, 0.19 * DUR];   // title clears first
+const T_WRITE   = [0.19 * DUR, 0.52 * DUR];   // letters wipe on
+const T_HOLD    = 0.72 * DUR;
+const T_RESOLVE = [0.78 * DUR, 0.94 * DUR];
+
+function layout(){
+  const F = Math.min(W, H);
+  const size = F * 0.135;
+  ctx.font = `700 ${Math.round(size)}px "Bonk","Bonk Display",system-ui`;
+  // measure each line, and each letter within it, for per-letter wipes
+  const lines = LINES.map(txt => {
+    const wTot = ctx.measureText(txt).width;
+    let x = 0;
+    const chars = [...txt].map(ch => {
+      const w = ctx.measureText(ch).width;
+      const c = {ch, x, w};
+      x += w;
+      return c;
+    });
+    return {txt, chars, w: wTot};
+  });
+  const widest = Math.max(...lines.map(l => l.w));
+  const lh = size * 1.16;
+  const totalH = lines.length * lh;
+  // bbox 0.789 of frame AREA -> a wide block, centred
+  const s = Math.min((W * 0.86) / widest, F * 0.86 / totalH, 1.6);
+  return {F, size: size * s, lines, widest: widest * s, lh: lh * s,
+          x0: (W - widest * s) / 2, y0: (H - totalH * s) / 2 + size * s};
+}
+
+function draw(t){
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = cssv('--ground', '#000');
+  ctx.fillRect(0, 0, W, H);
+
+  const type   = cssv('--type', '#fff');
+  const typeDim= cssv('--type-dim', 'rgba(255,255,255,.40)');
+  const rule   = cssv('--rule', '#ff6b1a');
+  const mark   = cssv('--mark', '#ff6b1a');
+
+  const L = layout();
+  const out_ = seg(t, T_CLEAR[0], T_CLEAR[1]);
+  const on   = t < T_WRITE[0] ? 0 : t < T_WRITE[1] ? seg(t, T_WRITE[0], T_WRITE[1]) : 1;
+  const gone = seg(t, T_RESOLVE[0], T_RESOLVE[1]);
+
+  /* Symmetric envelope: the composition arrives from empty and returns to it, so
+     the last frame lands where the first began and the loop closes.
+
+     Without it the piece opens on the title and closes on the logo -- two
+     unrelated compositions -- and the seam measured 3.6466 against a 0.0723
+     per-frame delta, i.e. 50x, a hard pop on every cycle. Fading only the middle
+     content is not enough: the thing on screen at t=0 and t=DUR has to match. */
+  const ENV_IN = 0.45, ENV_OUT = 0.60;
+  const ss = k => { k = k < 0 ? 0 : k > 1 ? 1 : k; return k * k * (3 - 2 * k); };
+  const env = ss(seg(t, 0, ENV_IN)) * (1 - ss(seg(t, DUR - ENV_OUT, DUR)));
+
+  const present = (1 - out_) * (1 - gone) * env;
+  const figure  = on * (1 - gone) * env;
+
+  /* ── opening title, which clears ─────────────────────────────────────── */
+  if (present > 0.01){
+    ctx.globalAlpha = present;
+    ctx.textAlign = 'center';
+    ctx.font = `700 ${Math.round(L.F * 0.150)}px "Bonk","Bonk Display",system-ui`;
+    ctx.fillStyle = type;
+    ctx.fillText('bonk', W / 2, H * 0.50);
+    ctx.fillStyle = rule;
+    ctx.fillRect(W * 0.30, H * 0.548, W * 0.40, Math.max(3, L.F * 0.0052));
+    ctx.font = `400 ${Math.round(L.F * 0.0256)}px "Bonk",system-ui`;
+    ctx.fillStyle = typeDim;
+    ctx.fillText('your library, in order', W / 2, H * 0.618);
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── the phrase wipes on, letter by letter ───────────────────────────── */
+  if (figure > 0.01){
+    ctx.font = `700 ${Math.round(L.size)}px "Bonk","Bonk Display",system-ui`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    let n = 0;
+    const per = 1 / (L.lines.reduce((a, l) => a + l.chars.length, 0) - 1);
+
+    for (let li = 0; li < L.lines.length; li++){
+      const line = L.lines[li];
+      const y = L.y0 + li * L.lh;
+      // the phrase is left-aligned per line but optically centred as a block
+      const lx = L.x0 + (L.widest - line.w * (L.size / (L.F * 0.135))) * 0;
+      for (const c of line.chars){
+        const k = clamp01((figure - n * per * 0.72) / 0.28);
+        n++;
+        if (k <= 0) continue;
+        const cx = lx + c.x * (L.size / (L.F * 0.135));
+        const cw = c.w * (L.size / (L.F * 0.135));
+        // a vertical wipe: the ink grows inside a fixed box, which is the
+        // clip's draw-on signature
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cx, y - L.size, Math.max(cw * k, 0.5), L.size * 1.6);
+        ctx.clip();
+        ctx.globalAlpha = 0.96;
+        ctx.fillStyle = type;
+        ctx.fillText(c.ch, cx, y);
+        ctx.restore();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // a rule that draws on beneath the phrase
+    if (figure > 0.8){
+      const rk = clamp01((figure - 0.8) / 0.2);
+      ctx.fillStyle = rule;
+      ctx.fillRect(L.x0, L.y0 + L.lines.length * L.lh + L.size * 0.34,
+                   L.widest * rk, Math.max(3, L.F * 0.0052));
+    }
+  }
+
+  /* ── resolve: the phrase clears, ONE element is left ─────────────────── */
+  // the mark rides the same envelope as everything else, so it does not sit on
+  // screen at t=DUR while the frame at t=0 is empty -- that mismatch was the seam
+  const r = seg(t, T_RESOLVE[0], T_RESOLVE[1]) * env;
+  if (r > 0.01 && window.BONK_MARK){
+    const M = window.BONK_MARK;
+    const gw = L.F * 0.32, s = gw / M.width, gh = M.height * s;
+    const gx = (W - gw) / 2, gy = (H - gh) / 2;
+    ctx.globalAlpha = r;
+    ctx.translate(gx, gy);
+    ctx.scale(s, s);
+    ctx.translate(-M.origin.x, -M.origin.y);
+    ctx.fillStyle = mark;
+    ctx.fill(new Path2D(M.d));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ── deterministic capture ───────────────────────────────────────────────── */
+window.__duration = DUR;
+window.__seek = s => { window.__t = s; draw(s); };
+
+/* A canvas `ctx.font` reference does NOT trigger an @font-face download -- only
+   DOM usage does. With no text nodes on this page the browser never fetches Bonk
+   and canvas silently renders the fallback, with no error and no warning. This
+   page did exactly that until the load below was added. __ready is a Promise and
+   must not resolve before the font has, or every captured frame races it. */
+window.__ready = (async () => {
+  try {
+    await Promise.all([
+      document.fonts.load("700 40px 'Bonk'"),
+      document.fonts.load("500 40px 'Bonk'"),
+      document.fonts.load("italic 400 40px 'Bonk'"),
+    ]);
+    await document.fonts.ready;
+  } catch (e) {}
+  draw(window.__t || 0);
+  return true;
+})();
+draw(0);
+</script>
+</body>
+</html>
