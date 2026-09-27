@@ -18,3 +18,12 @@ Thumbs.db
 # Keep assets dir but not its contents
 assets/*
 !assets/.gitkeep
+
+# Recovery snapshots. A deliberate local safety net — pre-change copies, old
+# versions, and duplicate font binaries. Never published.
+_archive/
+
+# Local harness links into the bonk-beta checkout. Root-anchored, so these
+# cannot swallow real source at projects/*/src/ or a packaged node_modules.
+/node_modules
+/src
