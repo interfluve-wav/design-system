@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BONK — logo grid</title>
+  <style>
+    html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden;font-family:system-ui,sans-serif}
+    #root{width:100vw;height:100vh}
+    #hint{position:fixed;top:12px;left:12px;color:#888;font-size:12px;z-index:10;pointer-events:none;font-family:monospace}
+    .picker{position:fixed;bottom:12px;left:12px;display:flex;gap:8px;z-index:10;font-family:monospace;font-size:11px}
+    .picker button{background:transparent;border:1px solid #444;color:#aaa;padding:4px 10px;cursor:pointer;font:inherit}
+    .picker button.on{border-color:#ff006e;color:#ff006e}
+    .picker button:hover{border-color:#fff;color:#fff}
+  </style>
+</head>
+<body>
+  <div id="hint">BONK · loading…</div>
+  <div id="root"></div>
+  <div class="picker" id="picker"></div>
+
+  <script>
+  // ─── PALETTE & VARIANTS ────────────────────────────────────────────
+  const PALETTES = {
+    sunset: ["#1a0033","#fff0e6","#ff006e","#fbb13c","#ffb3c1","#ff7a1a","#ffe14d","#0a0014"],
+    neon:   ["#0a0014","#00ffd1","#ff00aa","#ffea00","#bb86fc","#00aaff"],
+    mono:   ["#0a0a0a","#f5f5f5"],
+    rainbow:["#ff006e","#1a0033","#fb5607","#2d0036","#ffbe0b","#8338ec","#001233","#06ffa5","#00201d"],
+  };
+  const HOLD_MS = 1100, MORPH_MS = 700;
+
+  // ─── ENGINE (fork of dotcut, simpler) ──────────────────────────────
+  const SCENES = [
+    { kind: "text", transition: "wipe",    style: "drift",  letterMode: "dominant" },
+    { kind: "rings",   transition: "ripple", style: "grain", letterMode: "dominant" },
+    { kind: "checker", transition: "scatter", style: "swell", letterMode: "dominant" },
+    { kind: "columns", transition: "columns", style: "streak", letterMode: "dominant" },
+    { kind: "boxes",   transition: "collapse", style: "grain", letterMode: "dominant" },
+    { kind: "bars",    transition: "wipe",  style: "drift", letterMode: "dominant" },
+  ];
+
+  const LETTER_SC = 6;
+  let logoMask = null;
+
+  function easeOut(t){return 1-Math.pow(1-t,3)}
+  function easeInOut(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+  function hash(n){const s=Math.sin(n*127.1+311.7)*43758.5453;return s-Math.floor(s)}
+  function mixHex(a,b,t){const pa=parseInt(a.slice(1),16);const pb=parseInt(b.slice(1),16);return `rgb(${Math.round(((pa>>16)&255)*(1-t)+((pb>>16)&255)*t)},${Math.round(((pa>>8)&255)*(1-t)+((pb>>8)&255)*t)},${Math.round((pa&255)*(1-t)+(pb&255)*t)})`}
+  function smoothed(v,e0,e1){const t=Math.min(1,Math.max(0,(v-e0)/(e1-e0)));return t*t*(3-2*t)}
+  function hash2(x,y){const s=Math.sin(x*127.1+y*311.7)*43758.5453;return s-Math.floor(s)}
+  function cellMotion(kind,t,dir,rand){const u=Math.sin(Math.min(1,Math.max(0,t))*Math.PI);switch(kind){case"wipe":return{scale:1,dx:u*0.16*-dir,dy:0,spin:0};case"ripple":return{scale:1-u*0.10,dx:0,dy:u*-0.13,spin:0};case"scatter":return{scale:1,dx:u*0.18*Math.cos(rand*Math.PI*2),dy:u*0.18*Math.sin(rand*Math.PI*2),spin:0};case"collapse":return{scale:1-u*0.18,dx:0,dy:0,spin:0};case"columns":return{scale:1,dx:0,dy:u*0.22,spin:0}}}
+  function cellDelay(kind,x,y,cols,rows,rand){const fx=cols>1?x/(cols-1):0,fy=rows>1?y/(rows-1):0;switch(kind){case"wipe":return Math.min(1,Math.max(0,(fx*0.75+fy*0.25)*0.85+rand*0.15));case"ripple":{const d=Math.hypot(fx-0.5,fy-0.5)/0.707;return Math.min(1,d*0.9+rand*0.10)}case"scatter":return rand;case"collapse":{const d=Math.hypot(fx-0.5,fy-0.5)/0.707;return Math.min(1,(1-d)*0.85+rand*0.15)}case"columns":return Math.min(1,fx*0.9+rand*0.10)}}
+  function styleField(scene,cols,rows,t,out){const cx=(cols-1)/2,cy=(rows-1)/2,maxR=Math.hypot(cols,rows)/2;const FLIP=0.32;
+    const stateOf=(style,x,y)=>{switch(style){case"drift":{const a=Math.sin(x*0.41+y*0.23);const b=Math.sin(x*0.17-y*0.53+2.1);return smoothed((a+b)*0.5,-0.15,0.75)}case"grain":{return smoothed(hash2(x,y)*0.55+hash2(x+1,y)*0.15+hash2(x,y+1)*0.15+hash2(x+1,y+1)*0.15,0.34,0.86)}case"swell":{const d=Math.hypot(x-cx,y-cy)/maxR;const w=Math.sin(Math.atan2(y-cy,x-cx)*3.0)*0.14;return smoothed(1-(d+w),0.28,0.92)}case"streak":{const s=Math.sin(x*0.28+y*0.62);const c=Math.sin(x*0.09-y*0.11+1.3)*0.5+0.5;return smoothed(s*c,-0.05,0.7)}default:return 0}};
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){let order=0;switch(scene.style){case"drift":order=(x/cols)*0.75+Math.sin(y*0.5)*0.12+0.12;break;case"grain":order=(x/cols)*0.55+(y/rows)*0.25+hash2(x,y)*0.2;break;case"swell":order=Math.hypot(x-cx,y-cy)/maxR;break;case"streak":order=(x/cols)*0.8+(y/rows)*0.2;break}
+      const to=stateOf(scene.style,x,y);out[y*cols+x]=to}}
+  function buildSceneGhost(scene,cols,rows){const cx=(cols-1)/2,cy=(rows-1)/2;
+    const out=new Float32Array(cols*rows).fill(1);
+    if(scene.kind==="checker"){const b=Math.max(2,Math.round(cols/14));for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const v=((Math.floor(x/b)+Math.floor(y/b))%2===0)?0.18:1.0;out[y*cols+x]=v}}
+    else if(scene.kind==="bars"){const p=3;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const v=Math.floor((x+y)/p)%2===0?0.18:1.0;out[y*cols+x]=v}}
+    else if(scene.kind==="columns"){const bw=4,bh=3;for(let y=0;y<rows;y++){const band=Math.floor(y/bh);const shift=band%2===0?0:bw/2;for(let x=0;x<cols;x++){const v=Math.floor((x+shift)/bw)%2===0?0.18:1.0;out[y*cols+x]=v}}}
+    else if(scene.kind==="boxes"){const p=2.5;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const d=Math.max(Math.abs(x-cx),Math.abs(y-cy));const v=Math.floor(d/p)%2===0?0.18:1.0;out[y*cols+x]=v}}
+    else if(scene.kind==="rings"){const maxR=Math.hypot(cols,rows)/2;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const d=Math.hypot(x-cx,y-cy)/maxR;const v=Math.floor(d*6.0)%2===0?0.18:1.0;out[y*cols+x]=v}}
+    return out}
+  function rasterizeLogoAt(cols,rows){
+    if(!logoMask) return null;
+    // logoMask has 1 for filled logo area, 0 for outside
+    // To create OUTLINE, dilate the mask by 1px (any pixel adjacent to a logo pixel becomes outline)
+    // and erode by 1px (any pixel that's 1px inside the outline becomes core)
+    // Result: 0=outside, 1=outline band, 2=filled core
+    const lw = logoMask.width, lh = logoMask.height;
+    const out = new Uint8Array(cols*rows); // 0, 1, or 2
+    const scale = Math.min(cols / lw, rows / lh) * 0.85;
+    const tw = Math.max(1, Math.round(lw * scale));
+    const th = Math.max(1, Math.round(lh * scale));
+    const ox = Math.floor((cols - tw) / 2);
+    const oy = Math.floor((rows - th) / 2);
+    // For each output cell, check logo mask coverage
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      // Sample a 2x2 area in the scaled logo space
+      const x0 = Math.max(0, Math.floor((x-ox) / scale));
+      const y0 = Math.max(0, Math.floor((y-oy) / scale));
+      const x1 = Math.min(lw-1, Math.floor((x-ox+1) / scale));
+      const y1 = Math.min(lh-1, Math.floor((y-oy+1) / scale));
+      let cnt = 0, total = 0;
+      for(let sy=y0; sy<=y1; sy++)for(let sx=x0; sx<=x1; sx++){
+        total++;
+        if(logoMask.data[sy*lw + sx]) cnt++;
+      }
+      // Pixel is inside the logo if more than half the sub-cells are filled
+      if(cnt * 2 > total) out[y*cols+x] = 2;
+    }
+    // Pass 2: outline detection — cell is outline if it's NOT core but adjacent to core
+    const finalMask = new Uint8Array(cols*rows);
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      if(out[y*cols+x] === 2){
+        // Check 4-neighbors; if any neighbor is not core, this is outline-adjacent
+        let isOutline = false;
+        const neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
+        for(const [dx,dy] of neighbors){
+          const nx = x+dx, ny = y+dy;
+          if(nx<0||nx>=cols||ny<0||ny>=rows) continue;
+          if(out[ny*cols+nx] !== 2) isOutline = true;
+        }
+        finalMask[y*cols+x] = isOutline ? 1 : 2; // 1 = core (inside outline), 2 = outside
+      } else {
+        finalMask[y*cols+x] = 0;
+      }
+    }
+    // Now: 0 = outside (full carve = hole), 1 = outline (small dots), 2 = inside letters (no carve)
+    return finalMask;
+  }
+  function rasterize(scene,cols,rows){
+    const out=new Uint8Array(cols*rows).fill(1);
+    const logoMask2 = rasterizeLogoAt(cols, rows);
+    if(logoMask2){
+      // 0 = outside the logo (background, full cell — pink dot)
+      // 1 = outline band at letter edge (carve = visible as the negative-space letter outline)
+      // 2 = inside letters (no carve, looks like solid fill so the letterform reads as a chunk)
+      for(let i=0;i<cols*rows;i++){
+        if(logoMask2[i] === 1) out[i] = 0; // outline = full hole
+        // cells with value 0 (outside) or 2 (inside) both stay full
+      }
+    }
+    return out;
+  }
+
+  // ─── ENGINE STATE ──────────────────────────────────────────────────
+  const host = document.getElementById("root");
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "display:block;width:100%;height:100%";
+  host.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+
+  let cols=42, rows=20, pitch=10, ox=0, oy=0;
+  let target=new Uint8Array(0), live=new Float32Array(0), from=new Float32Array(0);
+  let delay=new Float32Array(0), rnd=new Float32Array(0), prog=new Float32Array(0);
+  let dir=new Float32Array(0), bore=new Float32Array(0);
+  let styleT=0,sceneIdx=0,phase="hold",phaseT=0;
+  let paletteMix=1,prevPalette=0,prevScene=0;
+  let dpr=1,lastTime=performance.now();
+  let pointer=null,raf=0;
+  let paletteName = "sunset";
+
+  // ─── BOOT ─────────────────────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const urlPalette = params.get("palette");
+  if (urlPalette && PALETTES[urlPalette]) paletteName = urlPalette;
+
+  function applyPalette(name){
+    paletteName = name;
+    window.__bonk.palette = name;
+  }
+
+  function resize(){
+    const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+    const marginX=0.5, marginY=0.5;
+    const targetCells=Math.max(20,Math.round(Math.min(w,h)/25));
+    rows=targetCells;
+    const pitchY=h/(rows+2*marginY);
+    const targetColsX=targetCells;
+    const pitchX=w/(targetColsX+2*marginX);
+    pitch=Math.min(pitchX,pitchY);
+    cols=Math.max(6,Math.round(w/pitch - 2*marginX));
+    ox=(w-cols*pitch)/2;oy=(h-rows*pitch)/2;
+    const n=cols*rows;
+    target=new Uint8Array(n);live=new Float32Array(n);from=new Float32Array(n);
+    delay=new Float32Array(n);rnd=new Float32Array(n);prog=new Float32Array(n);
+    dir=new Float32Array(n);bore=new Float32Array(n);
+    for(let i=0;i<n;i++)rnd[i]=hash(i*1.37+0.5);
+    applyScene(SCENES[sceneIdx],true);
+  }
+  function applyScene(scene,instant){
+    const next=rasterize(scene,cols,rows);
+    from.set(live);target=next;
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const i=y*cols+x;delay[i]=cellDelay(scene.transition,x,y,cols,rows,rnd[i])}
+    if(instant){for(let i=0;i<next.length;i++)live[i]=next[i];from.set(live)}
+  }
+  function advance(){
+    prevScene=sceneIdx;sceneIdx=(sceneIdx+1)%SCENES.length;
+    prevPalette=SCENES[(sceneIdx-1+SCENES.length)%SCENES.length].palette||0;
+    paletteMix=0;phase="morph";phaseT=0;styleT=0;
+    applyScene(SCENES[sceneIdx],false);
+  }
+  function step(dt){
+    phaseT+=dt*1000;
+    if(phase==="hold"&&phaseT>=HOLD_MS){advance()}
+    else if(phase==="morph"&&phaseT>=MORPH_MS){phase="hold";phaseT=0}
+    const p=phase==="morph"?Math.min(1,phaseT/MORPH_MS):1;
+    const n=cols*rows;
+    for(let i=0;i<n;i++){const d=delay[i];const local=Math.min(1,Math.max(0,(p-d*0.72)/0.28));const e=easeOut2(local);live[i]=from[i]+(target[i]-from[i])*e;const changing=from[i]!==target[i]&&phase==="morph";prog[i]=changing?local:0;dir[i]=target[i]>from[i]?1:-1}
+    paletteMix=Math.min(1,paletteMix+dt*2.2);
+    styleT=phase==="morph"?Math.min(1,styleT+dt/(MORPH_MS/1000)):1;
+    styleField(SCENES[sceneIdx],cols,rows,styleT,bore);
+  }
+  function draw(dt){
+    if(!ctx)return;step(dt);
+    const W=canvas.width,H=canvas.height,s=dpr;
+    const scene=SCENES[sceneIdx];
+    const pal = PALETTES[paletteName];
+    const n = pal.length;
+    const iA = prevPalette % n;
+    const iB = sceneIdx % n;
+    const cA = pal[iA], bA = iA % 2 === 0 ? pal[(iA+1)%n] : pal[(iA+n-1)%n];
+    const cB = pal[iB], bB = iB % 2 === 0 ? pal[(iB+1)%n] : pal[(iB+n-1)%n];
+    const m=easeInOut(paletteMix);
+    const circle = m<0.5 ? cA : cB;
+    const back = m<0.5 ? bA : bB;
+    ctx.fillStyle = back;
+    ctx.fillRect(0,0,W,H);
+    const pitchS=pitch*s,r=pitchS/2,sq=0;
+    ctx.fillStyle=circle;
+    const solidPath=new Path2D();
+    const stroke=Math.max(1.1*s,r*0.30);
+    const brush=1.6;
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+      const i=y*cols+x;let v=live[i];if(v<=0.004)continue;
+      if(pointer&&brush>0){const d=Math.hypot(x+0.5-pointer.x,y+0.5-pointer.y);if(d<brush)v*=Math.min(1,(d/brush)**2)}
+      if(v<=0.004)continue;
+      const mo=cellMotion(scene.transition,prog[i],dir[i],rnd[i]);
+      const cx=ox*s+(x+0.5)*pitchS+mo.dx*pitchS;
+      const cy=oy*s+(y+0.5)*pitchS+mo.dy*pitchS;
+      const rr=r*v*mo.scale;if(rr<=0.3)continue;
+      const canRing=rr>3.2*s;
+      const boreV=canRing?(rr-stroke)*bore[i]:0;
+      solidPath.moveTo(cx+rr,cy);
+      solidPath.arc(cx,cy,rr,0,Math.PI*2);
+      if(boreV>0.4){solidPath.moveTo(cx+boreV,cy);solidPath.arc(cx,cy,boreV,0,Math.PI*2,true)}
+    }
+    ctx.fill(solidPath,"evenodd");
+  }
+  function easeOut2(t){return 1-Math.pow(1-t,3)}
+  function easeInOut2(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+  function tick(now){
+    const dt=Math.min((now-lastTime)/1000,1/30);
+    lastTime=now;
+    draw(dt);
+    raf=requestAnimationFrame(tick);
+  }
+
+  host.addEventListener("pointermove",function(e){
+    const rect=e.currentTarget.getBoundingClientRect();
+    pointer={x:((e.clientX-rect.left)-ox)/pitch,y:((e.clientY-rect.top)-oy)/pitch};
+  });
+  host.addEventListener("pointerleave",function(){pointer=null});
+  host.addEventListener("click",advance);
+  window.addEventListener("keydown",function(e){
+    if(e.key.toLowerCase()==="k") advance();
+  });
+
+  // ─── PICKER UI ────────────────────────────────────────────────────
+  const picker = document.getElementById("picker");
+  Object.keys(PALETTES).forEach(name => {
+    const b = document.createElement("button");
+    b.textContent = name.toUpperCase();
+    if(name === paletteName) b.classList.add("on");
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".picker button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+      applyPalette(name);
+    });
+    picker.appendChild(b);
+  });
+
+  // ─── LOAD LOGO SVG & RASTERIZE ─────────────────────────────────────
+  function loadLogo(){
+      // Inline the bonk SVG into a hidden host, draw to canvas, extract mask.
+      // The source SVG has a 2000x2000 white "plate" path that fills the whole viewBox.
+      // We only want the actual letter glyphs, so we set the bg to BLACK and the glyphs WHITE.
+      const svgText = `<?xml version="1.0" encoding="UTF-8"?>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" width="200" height="200">
+  <rect width="2000" height="2000" fill="black"/>
+  <g fill="white" transform="translate(0,0) scale(1)">
+    <path d="M1306.25 1045.9C1311.2 1045.9 1313.68 1048.26 1313.68 1052.97C1313.68 1057.75 1311.2 1060.13 1306.25 1060.13C1301.23 1060.13 1298.73 1057.75 1298.73 1052.97C1298.73 1048.26 1301.23 1045.9 1306.25 1045.9ZM1313.23 1064.35V1112C1313.23 1112.96 1313.22 1113.95 1313.19 1115C1313.16 1116.04 1313.11 1116.99 1313.05 1117.82C1312.76 1121.88 1311.28 1125.07 1308.62 1127.4C1305.96 1129.73 1301.59 1130.9 1295.5 1130.9C1293.71 1130.9 1292.04 1130.81 1290.48 1130.63V1120.87C1293.29 1121.11 1295.36 1120.91 1296.71 1120.28C1298.05 1119.66 1298.82 1118.36 1299 1116.39C1299.11 1115.73 1299.17 1115.03 1299.17 1114.28C1299.17 1113.53 1299.17 1112.84 1299.17 1112.18V1064.35H1313.23Z"/>
+    <path d="M1294.16 1046.25V1112.09H1280.1V1104.92L1276.51 1110.2C1275.2 1111.22 1273.43 1112 1271.23 1112.54C1269.02 1113.07 1266.69 1113.34 1264.24 1113.34C1259.88 1113.34 1256.12 1112.31 1252.96 1110.26C1249.79 1108.19 1247.36 1105.34 1245.65 1101.7C1243.95 1098.06 1243.1 1093.88 1243.1 1089.16C1243.1 1083.43 1244.14 1078.4 1246.23 1074.79C1248.33 1070.93 1251.1 1068.02 1254.56 1066.05C1258.03 1064.08 1261.79 1063.1 1265.86 1063.1C1267.83 1063.1 1269.87 1063.32 1271.99 1063.77C1274.11 1064.21 1275.77 1064.82 1276.96 1065.6L1280.1 1070.62V1046.25H1294.16ZM1268.72 1103.67C1271.89 1103.67 1274.57 1102.55 1276.78 1100.31C1278.99 1098.07 1280.1 1094.23 1280.1 1088.8V1086.56C1280.1 1083.16 1279.56 1080.44 1278.48 1078.41C1277.41 1076.38 1276.04 1074.93 1274.36 1074.07C1272.69 1073.2 1270.96 1072.77 1269.17 1072.77C1265.76 1072.77 1262.97 1074.07 1260.79 1076.66C1258.61 1079.26 1257.53 1083.16 1257.53 1088.35C1257.53 1093.07 1258.57 1096.8 1260.66 1099.55C1262.75 1102.29 1265.43 1103.67 1268.72 1103.67Z"/>
+    <path d="M1165.31 1001.5L1155.08 1012.73V1052.4H1115.92V869H1155.08V977.792L1205.48 919.396H1251.89L1194.25 980.792L1252.64 1052.4H1204L1165.31 1001.5Z"/>
+    <path d="M1101.69 952.583C1102.19 955.917 1102.53 959.542 1102.69 963.458C1102.86 967.365 1102.94 971.974 1102.94 977.292V1052.4H1063.75V983.271C1063.75 980.786 1063.75 977.927 1063.75 974.688C1063.75 971.438 1063.59 968.146 1063.25 964.813C1062.75 957.995 1060.59 952.635 1056.75 948.729C1052.93 944.813 1047.2 942.854 1039.57 942.854C1031.91 942.854 1025.5 946.599 1020.34 954.083C1015.18 961.573 1012.61 973.802 1012.61 990.771V1052.4H973.442V919.396H1012.61V940.354L1023.59 924.396C1032.07 918.745 1042.39 915.917 1054.53 915.917C1068.49 915.917 1079.47 919.12 1087.46 925.521C1095.45 931.927 1100.19 940.948 1101.69 952.583Z"/>
+    <path d="M897.336 915.917C911.971 915.917 924.529 918.87 935.003 924.771C945.487 930.677 953.513 938.87 959.086 949.354C964.654 959.828 967.44 971.969 967.44 985.771C967.44 999.578 964.654 1011.77 959.086 1022.33C953.513 1032.89 945.487 1041.13 935.003 1047.04C924.529 1052.94 911.971 1055.9 897.336 1055.9C882.695 1055.9 870.133 1052.94 859.648 1047.04C849.174 1041.13 841.148 1032.89 835.565 1022.33C829.992 1011.77 827.211 999.578 827.211 985.771C827.211 971.969 829.992 959.828 835.565 949.354C841.148 938.87 849.174 930.677 859.648 924.771C870.133 918.87 882.695 915.917 897.336 915.917ZM897.336 1028.94C906.654 1028.94 913.93 1025.2 919.169 1017.71C924.404 1010.22 927.023 999.578 927.023 985.771C927.023 971.969 924.404 961.365 919.169 953.958C913.93 946.557 906.654 942.854 897.336 942.854C888.013 942.854 880.695 946.557 875.378 953.958C870.055 961.365 867.398 971.969 867.398 985.771C867.398 999.578 870.055 1010.22 875.378 1017.71C880.695 1025.2 888.013 1028.94 897.336 1028.94Z"/>
+    <path d="M770.333 915.917C782.635 915.917 793.156 918.786 801.896 924.521C810.63 930.26 817.365 938.161 822.104 948.229C826.854 958.286 829.229 969.885 829.229 983.021C829.229 998.995 826.313 1012.39 820.479 1023.21C814.656 1034.02 806.964 1042.17 797.396 1047.67C787.839 1053.15 777.318 1055.9 765.833 1055.9C760.344 1055.9 754.651 1055.27 748.75 1054.02C742.844 1052.77 738.229 1051.06 734.896 1048.9L726.167 1034.94V1052.4H687V869H726.167V939.354L736.146 924.646C739.979 921.813 744.969 919.656 751.125 918.167C757.276 916.667 763.677 915.917 770.333 915.917ZM756.604 1028.94C766.089 1028.94 773.865 1025.32 779.938 1018.08C786.005 1010.85 789.042 999.995 789.042 985.521C789.042 972.385 786.172 961.99 780.438 954.333C774.698 946.682 767.172 942.854 757.854 942.854C748.865 942.854 741.339 945.932 735.271 952.083C729.198 958.24 726.167 968.969 726.167 984.271V990.271C726.167  999.745 727.656 1007.31 730.646 1012.98C733.646 1018.64 737.469 1022.71 742.125 1025.21C746.792 1027.7 751.615 1028.94 756.604 1028.94Z"/>
+  </g>
+  </svg>`;
+    const blob = new Blob([svgText], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload = function(){
+      const cv = document.createElement("canvas");
+      cv.width = 200; cv.height = 200;
+      const c = cv.getContext("2d");
+      c.drawImage(im, 0, 0, 200, 200);
+      const data = c.getImageData(0, 0, 200, 200).data;
+      // Build mask: 1 if white (logo fill), 0 if black (bg)
+      logoMask = { width: 200, height: 200, data: new Uint8Array(200*200) };
+      for(let i=0;i<200*200;i++){
+        logoMask.data[i] = data[i*4] > 128 ? 1 : 0;
+      }
+      URL.revokeObjectURL(url);
+      document.getElementById("hint").textContent = "BONK · click to advance · cursor to retract";
+      resize();
+      raf = requestAnimationFrame(tick);
+    };
+    im.onerror = function(){
+      document.getElementById("hint").textContent = "BONK · failed to load logo";
+    };
+    im.src = url;
+  }
+
+  window.__bonk = { palette: paletteName, setPalette: applyPalette };
+  loadLogo();
+  </script>
+</body>
+</html>
