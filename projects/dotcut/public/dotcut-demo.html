@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>B O N K — dotcut</title>
+  <style>
+    /* ── THEME ────────────────────────────────────────────────────────────────
+       Page colours AND every preset's palette live here, not in the JS presets
+       below. Each preset declares --palette-count and supplies
+       --p0-a/--p0-b, --p1-a/--p1-b … ; readPalettes() reads exactly that many
+       pairs. Retuning or adding a palette is therefore a variable change rather
+       than an edit inside the PRESETS array.
+
+       NOTE — the #000/#fff inside rasterizeText() are deliberately NOT themed.
+       That canvas is a binary mask (black ground, white glyph, read back as a
+       0/1 array), so theming it would break the mask the moment ink and ground
+       are anything other than maximally separated. A blind find-and-replace on
+       every hex in this file would have introduced exactly that bug. */
+    :root{
+      --page-ground:#09090B;
+      --hint:#888888;
+      /* DEFAULT palettes — also the fallback when no preset is selected */
+      --palette-count:6;
+      --p0-a:#8aa9ff; --p0-b:#1f45f5;
+      --p1-a:#ffd166; --p1-b:#e5484d;
+      --p2-a:#b8f2c9; --p2-b:#0f8a5f;
+      --p3-a:#ffc2e2; --p3-b:#c81d77;
+      --p4-a:#c7d2fe; --p4-b:#4338ca;
+      --p5-a:#fde68a; --p5-b:#b45309;
+    }
+    [data-preset="monolith"]{
+      --palette-count:1;
+      --p0-a:#f5f5f5; --p0-b:#0a0a0a;
+    }
+    [data-preset="kaleido"]{
+      --palette-count:6;
+      --p0-a:#ff006e; --p0-b:#1a0033;
+      --p1-a:#fb5607; --p1-b:#1a1a2e;
+      --p2-a:#ffbe0b; --p2-b:#2d0036;
+      --p3-a:#8338ec; --p3-b:#0a0a23;
+      --p4-a:#3a86ff; --p4-b:#001233;
+      --p5-a:#06ffa5; --p5-b:#00201d;
+    }
+    [data-preset="neon"]{
+      --palette-count:5;
+      --p0-a:#00ffd1; --p0-b:#0a0014;
+      --p1-a:#ff00aa; --p1-b:#0a0014;
+      --p2-a:#ffea00; --p2-b:#0a0014;
+      --p3-a:#00aaff; --p3-b:#0a0014;
+      --p4-a:#bb86fc; --p4-b:#0a0014;
+    }
+    html,body{margin:0;height:100%;background:var(--page-ground);overflow:hidden;font-family:'Cabinet Grotesk',monospace}
+    #root{width:100vw;height:100vh;cursor:crosshair}
+    #hint{position:fixed;top:12px;left:12px;color:var(--hint);font-size:12px;z-index:10}
+  </style>
+</head>
+<body>
+  <div id="hint">DEFAULT · B O N K · K/L to switch · click to advance · cursor to retract</div>
+  <div id="root"></div>
+  <script>
+    // ─── PRESETS ─────────────────────────────────────────────────────
+    // Each preset overrides: scenes, letters, palettes, hold/morph timing, font weight.
+    // K = previous preset, L = next preset (case-insensitive).
+    // Cycle is keyed off the currently-active preset's scenes.
+    const PRESETS = [
+      {
+        name: "DEFAULT",
+        scenes: [
+          { kind: "text",      value: "B", transition: "wipe",    palette: 0, style: "drift",  letterMode: "dominant" },
+          { kind: "rings",     transition: "ripple",  palette: 1, style: "grain", letterMode: "dominant" },
+          { kind: "checker",   transition: "scatter", palette: 3, style: "swell", letterMode: "dominant" },
+          { kind: "columns",   transition: "columns", palette: 2, style: "streak", letterMode: "dominant" },
+          { kind: "boxes",     transition: "collapse", palette: 4, style: "grain", letterMode: "dominant" },
+          { kind: "bars",      transition: "wipe",    palette: 5, style: "drift", letterMode: "dominant" },
+        ],
+        letters: ["B","O","N","K"],
+        // palette: in CSS(:root) — see readPalettes()
+        hold: 900, morph: 620, fontWeight: 700,
+      },
+      {
+        name: "MONOLITH",
+        // B&W, big cells, slow hold — single letter form with no scene gimmickry
+        scenes: [
+          { kind: "text", value: "K", transition: "wipe", palette: 0, style: "drift", letterMode: "dominant" },
+          { kind: "text", value: "O", transition: "wipe", palette: 0, style: "drift", letterMode: "dominant" },
+          { kind: "text", value: "N", transition: "wipe", palette: 0, style: "drift", letterMode: "dominant" },
+          { kind: "text", value: "K", transition: "wipe", palette: 0, style: "drift", letterMode: "dominant" },
+        ],
+        letters: ["K","O","N","K"],
+        // palette: in CSS([data-preset="monolith"]) — see readPalettes()
+        hold: 1400, morph: 900, fontWeight: 900,
+      },
+      {
+        name: "KALEIDO",
+        // saturated rainbow, dense cells, snappy morph, scene patterns dominate (overlay)
+        scenes: [
+          { kind: "rings",    transition: "ripple",  palette: 0, style: "swell",  letterMode: "overlay" },
+          { kind: "checker",  transition: "scatter", palette: 1, style: "grain",  letterMode: "overlay" },
+          { kind: "columns",  transition: "columns", palette: 2, style: "streak", letterMode: "overlay" },
+          { kind: "bars",     transition: "wipe",    palette: 3, style: "drift",  letterMode: "overlay" },
+          { kind: "boxes",    transition: "collapse", palette: 4, style: "swell", letterMode: "overlay" },
+          { kind: "rings",    transition: "ripple",  palette: 5, style: "streak", letterMode: "overlay" },
+        ],
+        letters: ["B","O","N","K","S"],
+        // palette: in CSS([data-preset="kaleido"]) — see readPalettes()
+        hold: 500, morph: 380, fontWeight: 800,
+      },
+      {
+        name: "NEON",
+        // dark BG, thin glow-y letters, scene patterns carve around glyph
+        scenes: [
+          { kind: "text",      value: "N", transition: "wipe",    palette: 0, style: "drift",  letterMode: "dominant" },
+          { kind: "rings",     transition: "ripple",  palette: 1, style: "grain", letterMode: "dominant" },
+          { kind: "text",      value: "K", transition: "wipe",    palette: 2, style: "swell",  letterMode: "dominant" },
+          { kind: "columns",   transition: "columns", palette: 3, style: "streak", letterMode: "dominant" },
+          { kind: "text",      value: "O", transition: "wipe",    palette: 4, style: "grain",  letterMode: "dominant" },
+        ],
+        letters: ["N","E","O","N"],
+        // palette: in CSS([data-preset="neon"]) — see readPalettes()
+        hold: 1100, morph: 720, fontWeight: 600,
+      },
+    ];
+
+    /* ─── PALETTES ───────────────────────────────────────────────────────
+       Read from the CSS custom properties declared per preset in <style>.
+       Colours live in CSS; this file only consumes them. */
+    function applyPaletteCSS(presetName){
+      document.documentElement.dataset.preset = String(presetName).toLowerCase();
+      const cs = getComputedStyle(document.documentElement);
+      const n = parseInt(cs.getPropertyValue("--palette-count").trim(), 10) || 6;
+      const out = [];
+      for (let i = 0; i < n; i++){
+        const a = cs.getPropertyValue("--p" + i + "-a").trim();
+        const b = cs.getPropertyValue("--p" + i + "-b").trim();
+        if (!a || !b) break;
+        out.push([a, b]);
+      }
+      /* a preset with no CSS block must not render nothing */
+      return out.length ? out : [["#ffffff", "#000000"]];
+    }
+
+    // ─── BOOT ─────────────────────────────────────────────────────────
+    // Allow ?letters=BONK to override the letter cycle on the DEFAULT preset
+    const urlParams = new URLSearchParams(location.search);
+    const urlLetters = urlParams.get("letters");
+    if (urlLetters) {
+      const list = urlLetters.split(/[\s,]+/).filter(Boolean).slice(0, 12);
+      if (list.length) PRESETS[0].letters = list;
+    }
+
+    let presetIdx = urlParams.has("preset") ? parseInt(urlParams.get("preset"), 10) || 0 : 0;
+    // If letters are specified, override the active preset's letter cycle
+    if (urlLetters) {
+      PRESETS[presetIdx].letters = urlLetters.split(/[\s,]+/).filter(Boolean).slice(0, 12);
+    }
+    let SCENES = PRESETS[presetIdx].scenes;
+    let LETTERS = PRESETS[presetIdx].letters;
+    let PALETTES = applyPaletteCSS(PRESETS[presetIdx].name);
+    let HOLD_MS = PRESETS[presetIdx].hold;
+    let MORPH_MS = PRESETS[presetIdx].morph;
+    let fontWeight = PRESETS[presetIdx].fontWeight;
+
+    function applyPreset(i){
+      presetIdx = ((i % PRESETS.length) + PRESETS.length) % PRESETS.length;
+      const p = PRESETS[presetIdx];
+      SCENES = p.scenes; LETTERS = p.letters; PALETTES = applyPaletteCSS(p.name);
+      HOLD_MS = p.hold; MORPH_MS = p.morph; fontWeight = p.fontWeight;
+      // reset cycle so the new preset starts cleanly
+      sceneIdx = 0; letterIdx = 0;
+      prevPalette = SCENES[SCENES.length-1].palette;
+      phase = "hold"; phaseT = 0; styleT = 0; paletteMix = 1;
+      resize();
+      // visible indicator
+      const hint = document.getElementById("hint");
+      if(hint) hint.textContent = `${p.name} · ${LETTERS.join(" ")} · K/L to switch · click to advance · cursor to retract`;
+    }
+    const COLS=42;
+    const easeOut=(t)=>1-Math.pow(1-t,3);
+    const easeInOut=(t)=>t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+    /* Same job as easeOut but with a far lower peak velocity (1.875 vs 3.0), so a cell
+       leaves the old state and settles into the new one instead of snapping away from
+       it — that lower peak is what you actually feel as "smoother". */
+    const smootherstep=(u)=>u*u*u*(u*(u*6-15)+10);
+    /* Per-cell morph window and stagger. These MUST sum to 1: the last cell starts at
+       p = MORPH_SPREAD and has to finish by p = 1, or the morph never completes before
+       the hold begins and cells arrive already mid-state. */
+    const MORPH_WINDOW=0.34, MORPH_SPREAD=0.66;
+    /* The palette swap is a FULL-FRAME colour change, so it dominates how smooth the
+       reel feels — far more than any per-cell effect. Ramp it over PALETTE_RAMP x the
+       preset's morph time rather than a fixed 0.45s: at 0.45s the eased ramp peaks
+       near 6 luma per frame against a total range of ~42, which reads as a pop. Tying
+       it to MORPH_MS keeps it completed before the next advance on fast presets like
+       KALEIDO (500/380ms) as well as slow ones. */
+    const PALETTE_RAMP=1.6;
+    /* Letter grain: cells the letterform carves out are empty, so the letters read as
+       flat void. A small noise-driven dot in some of them gives the type texture
+       without closing the counters. Radius is a fraction of the cell radius. */
+    const LETTER_GRAIN=0.30, LETTER_GRAIN_CUT=0.55;
+    function hash(n){const s=Math.sin(n*127.1+311.7)*43758.5453;return s-Math.floor(s)}
+    function mixHex(a,b,t){const pa=parseInt(a.slice(1),16);const pb=parseInt(b.slice(1),16);const r=Math.round(((pa>>16)&255)*(1-t)+((pb>>16)&255)*t);const g=Math.round(((pa>>8)&255)*(1-t)+((pb>>8)&255)*t);const bl=Math.round((pa&255)*(1-t)+(pb&255)*t);return `rgb(${r},${g},${bl})`}
+    function smoothed(v,e0,e1){const t=Math.min(1,Math.max(0,(v-e0)/(e1-e0)));return t*t*(3-2*t)}
+    function hash2(x,y){const s=Math.sin(x*127.1+y*311.7)*43758.5453;return s-Math.floor(s)}
+    function cellMotion(kind,t,dir,rand){const u=Math.sin(Math.min(1,Math.max(0,t))*Math.PI);switch(kind){case"wipe":return{scale:1,dx:u*0.16*-dir,dy:0,spin:0};case"ripple":return{scale:1-u*0.10,dx:0,dy:u*-0.13,spin:0};case"scatter":return{scale:1,dx:u*0.18*Math.cos(rand*Math.PI*2),dy:u*0.18*Math.sin(rand*Math.PI*2),spin:0};case"collapse":return{scale:1-u*0.18,dx:0,dy:0,spin:0};case"columns":return{scale:1,dx:0,dy:u*0.22,spin:0}}}
+    function styleField(scene,cols,rows,t,out,prev){const cx=(cols-1)/2,cy=(rows-1)/2,maxR=Math.hypot(cols,rows)/2;const FLIP=0.32;
+      const stateOf=(style,x,y)=>{switch(style){case"drift":{const a=Math.sin(x*0.41+y*0.23);const b=Math.sin(x*0.17-y*0.53+2.1);return smoothed((a+b)*0.5,-0.15,0.75)}case"grain":{const n=hash2(x,y)*0.55+hash2(x+1,y)*0.15+hash2(x,y+1)*0.15+hash2(x+1,y+1)*0.15;return smoothed(n,0.34,0.86)}case"swell":{const d=Math.hypot(x-cx,y-cy)/maxR;const w=Math.sin(Math.atan2(y-cy,x-cx)*3.0)*0.14;return smoothed(1-(d+w),0.28,0.92)}case"streak":{const s=Math.sin(x*0.28+y*0.62);const c=Math.sin(x*0.09-y*0.11+1.3)*0.5+0.5;return smoothed(s*c,-0.05,0.7)}default:return 0}};
+      for(let y=0;y<rows;y++){for(let x=0;x<cols;x++){let order=0;switch(scene.style){case"drift":order=(x/cols)*0.75+Math.sin(y*0.5)*0.12+0.12;break;case"grain":order=(x/cols)*0.55+(y/rows)*0.25+hash2(x,y)*0.2;break;case"swell":order=Math.hypot(x-cx,y-cy)/maxR;break;case"streak":order=(x/cols)*0.8+(y/rows)*0.2;break}
+        const from=stateOf(prev?prev.style:scene.style,x,y);const to=stateOf(scene.style,x,y);
+        const u=Math.min(1,Math.max(0,(t-order*(1-FLIP))/FLIP));const e=u*u*(3-2*u);out[y*cols+x]=from+(to-from)*e}}}
+    // Render text at SC× supersample, downsample with majority vote so strokes survive at the grid resolution
+    const LETTER_SC=6;
+    /* Extra space between glyphs, as a fraction of the font size. 0 = whatever the
+       font's natural advance gives, which reads as letters touching at grid scale. */
+    const TRACKING=0.10;
+    function rasterizeText(text,cols,rows,fontFamily){
+      const out=new Uint8Array(cols*rows).fill(1);
+      const W=cols*LETTER_SC,H=rows*LETTER_SC;
+      const cv=document.createElement("canvas");cv.width=W;cv.height=H;
+      const ctx=cv.getContext("2d",{willReadFrequently:true});if(!ctx)return out;
+      ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);ctx.fillStyle="#fff";ctx.textAlign="center";ctx.textBaseline="middle";
+
+      /* Size self-calibrating: start big, measure the ACTUAL ink height, then scale
+         so the glyphs fill ~92% of the supersample canvas.
+         This used to read `size = rows * 1.05` — grid CELLS, not canvas pixels. With
+         LETTER_SC=6 the canvas is 6x larger, so the type rendered 6x too small:
+         measured, "BONK" carved a 6x1 box occupying 3.6% of the grid height, which is
+         why the word never read. Never hardcode a cap-height ratio when measureText
+         exists — ink height varies with font and weight. */
+      let size=Math.floor(H);
+      const setFont=(s)=>{ctx.font=`${fontWeight} ${s}px ${fontFamily}`};
+      setFont(size);
+      const mm=ctx.measureText("H");
+      const inkH=mm.actualBoundingBoxAscent+mm.actualBoundingBoxDescent;
+      if(inkH>0){size=Math.floor(size*(H*0.92)/inkH);setFont(size)}
+
+      const glyphs=text.split("");
+      const layout=()=>{
+        const ws=glyphs.map((g)=>ctx.measureText(g).width);
+        const gap=size*TRACKING;
+        return {ws,gap,total:ws.reduce((a,b)=>a+b,0)+gap*Math.max(0,glyphs.length-1)};
+      };
+      let L=layout();
+      const maxW=W*0.94;
+      if(L.total>maxW){size=Math.floor(size*maxW/L.total);setFont(size);L=layout()}
+
+      /* Draw glyph by glyph so the tracking is real. A single fillText() gives no
+         control over inter-letter space at all, which is why the letters crowded. */
+      let px=W/2-L.total/2;
+      const baselineY=H/2-H*0.02;
+      glyphs.forEach((g,i)=>{ctx.fillText(g,px+L.ws[i]/2,baselineY);px+=L.ws[i]+L.gap});
+      const data=ctx.getImageData(0,0,W,H).data;
+      // Downsample: each output cell = LETTER_SC×LETTER_SC input cells, filled on a
+      // MAJORITY of hits (see the threshold below) — not "any", which would fatten
+      // strokes and close the counters.
+      for(let y=0;y<rows;y++){for(let x=0;x<cols;x++){
+        let hit=0,total=LETTER_SC*LETTER_SC;
+        for(let sy=0;sy<LETTER_SC;sy++){for(let sx=0;sx<LETTER_SC;sx++){
+          const px=(y*LETTER_SC+sy)*W+(x*LETTER_SC+sx);
+          if(data[px*4]>110)hit++;
+        }}
+        // Filled if majority of sub-cells hit — keeps the letterform crisp at grid scale
+        if(hit>=total*0.5)out[y*cols+x]=0;
+      }}
+      return out}
+    // Build a scene pattern as a fractional "ghost" mask (0..1), where 0=full negative space, 1=fully filled.
+    // textLetterDominant: letter IS the negative space; scene becomes a faint ghost (used to give the letter grid some movement via style field)
+    // overlay (default): scene carve + letter overlay
+    function buildSceneGhost(scene,cols,rows){const cx=(cols-1)/2,cy=(rows-1)/2;
+      const out=new Float32Array(cols*rows).fill(1);
+      if(scene.kind==="checker"){const b=Math.max(2,Math.round(cols/14));for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const v=((Math.floor(x/b)+Math.floor(y/b))%2===0)?0.18:1.0;out[y*cols+x]=v}}
+      else if(scene.kind==="bars"){const p=3;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const v=Math.floor((x+y)/p)%2===0?0.18:1.0;out[y*cols+x]=v}}
+      else if(scene.kind==="columns"){const bw=4,bh=3;for(let y=0;y<rows;y++){const band=Math.floor(y/bh);const shift=band%2===0?0:bw/2;for(let x=0;x<cols;x++){const v=Math.floor((x+shift)/bw)%2===0?0.18:1.0;out[y*cols+x]=v}}}
+      else if(scene.kind==="boxes"){const p=2.5;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const d=Math.max(Math.abs(x-cx),Math.abs(y-cy));const v=Math.floor(d/p)%2===0?0.18:1.0;out[y*cols+x]=v}}
+      else if(scene.kind==="rings"){const maxR=Math.hypot(cols,rows)/2;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const d=Math.hypot(x-cx,y-cy)/maxR;const v=Math.floor(d*6.0)%2===0?0.18:1.0;out[y*cols+x]=v}}
+      return out}
+    function rasterize(scene,cols,rows,fontFamily,letter){const out=new Uint8Array(cols*rows).fill(1);
+      const cx=(cols-1)/2,cy=(rows-1)/2;
+      const letterMode=scene.letterMode||"overlay";
+      if(letterMode==="dominant"){
+        // Letter IS the negative space; scene becomes a faint ghost that lightly chips the letter strokes further
+        const sceneGhost=buildSceneGhost(scene,cols,rows);
+        const letterText=(letter||scene.value||"B").trim();
+        if(letterText){
+          const letterMask=rasterizeText(letterText,cols,rows,fontFamily);
+          for(let i=0;i<cols*rows;i++){
+            const isLetter=letterMask[i]===0;
+            const ghostCuts=sceneGhost[i]<0.5;
+            // Letter wins — fully carves. Ghost only adds tiny extra notches where it overlaps a stroke (rare).
+            if(isLetter)out[i]=0;
+            // Ghost does NOT carve outside the letter — keep surrounding cells solid so the letterform reads cleanly
+          }
+        }
+      } else {
+        // Standard overlay mode: scene carves, letter stacks additional negative space
+        if(scene.kind==="checker"){const b=Math.max(2,Math.round(cols/14));for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)if((Math.floor(x/b)+Math.floor(y/b))%2===0)out[y*cols+x]=0}
+        else if(scene.kind==="bars"){const p=3;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)if(Math.floor((x+y)/p)%2===0)out[y*cols+x]=0}
+        else if(scene.kind==="columns"){const bw=4,bh=3;for(let y=0;y<rows;y++){const band=Math.floor(y/bh);const shift=band%2===0?0:bw/2;for(let x=0;x<cols;x++)if(Math.floor((x+shift)/bw)%2===0)out[y*cols+x]=0}}
+        else if(scene.kind==="boxes"){const p=2.5;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const d=Math.max(Math.abs(x-cx),Math.abs(y-cy));if(Math.floor(d/p)%2===0)out[y*cols+x]=0}}
+        else if(scene.kind==="rings"){const maxR=Math.hypot(cols,rows)/2;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const d=Math.hypot(x-cx,y-cy)/maxR;if(Math.floor(d*6.0)%2===0)out[y*cols+x]=0}}
+        if(letter&&letter.trim()){const letterMask=rasterizeText(letter,cols,rows,fontFamily);for(let i=0;i<cols*rows;i++)if(letterMask[i]===0)out[i]=0}
+      }
+      return out}
+    function cellDelay(kind,x,y,cols,rows,rand){const fx=cols>1?x/(cols-1):0,fy=rows>1?y/(rows-1):0;switch(kind){case"wipe":return Math.min(1,Math.max(0,(fx*0.75+fy*0.25)*0.85+rand*0.15));case"ripple":{const d=Math.hypot(fx-0.5,fy-0.5)/0.707;return Math.min(1,d*0.9+rand*0.10)}case"scatter":return rand;case"collapse":{const d=Math.hypot(fx-0.5,fy-0.5)/0.707;return Math.min(1,(1-d)*0.85+rand*0.15)}case"columns":return Math.min(1,fx*0.9+rand*0.10)}}
+    function roundedSquare(ctx,cx,cy,r,sq){const n=2+sq*8;const steps=22;ctx.moveTo(cx+r,cy);for(let i=1;i<=steps;i++){const t=(i/steps)*Math.PI*2;const c=Math.cos(t);const sv=Math.sin(t);ctx.lineTo(cx+Math.sign(c)*Math.pow(Math.abs(c),2/n)*r,cy+Math.sign(sv)*Math.pow(Math.abs(sv),2/n)*r)}ctx.closePath()}
+
+    // Engine
+    const host=document.getElementById("root");
+    const canvas=document.createElement("canvas");
+    canvas.style.cssText="display:block;width:100%;height:100%";
+    host.appendChild(canvas);
+    const ctx=canvas.getContext("2d");
+    let cols=COLS,rows=12,pitch=10,ox=0,oy=0;
+    let target=new Uint8Array(cols*rows),live=new Float32Array(cols*rows),from=new Float32Array(cols*rows);
+    let delay=new Float32Array(cols*rows),rnd=new Float32Array(cols*rows),prog=new Float32Array(cols*rows);
+    let dir=new Float32Array(cols*rows),bore=new Float32Array(cols*rows);
+    let styleT=0,sceneIdx=0,letterIdx=0,phase="hold",phaseT=0,clockT=0;
+    let paletteMix=1,prevPalette=0,prevScene=0;
+    let dpr=1,lastTime=performance.now();
+    let pointer=null,raf=0;
+
+    const fontFamily="Cabinet Grotesk,monospace";
+
+    function resize(){
+      const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
+      dpr=Math.min(window.devicePixelRatio||1,2);
+      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+      // Use separate x and y pitches so the grid fills the canvas completely (no blank edges).
+      // The grid becomes slightly non-square on wide viewports — cells stretch horizontally.
+      const marginX=0.5, marginY=0.5;
+      /* Grid density decides how much room the word gets, and it matters more than
+         it looks. The word is width-limited (~4.2:1 for four capitals), so its
+         height in cells comes out at roughly cols/4.2. At /25 that was 45x28 and a
+         word only 10 rows tall — too few for a K's diagonal counter to open, so the
+         arm merged into the stem as a solid top bar and the K read as an R. /16
+         gives the word ~17 rows, where B/O/N/K all resolve cleanly. */
+      const targetCells=Math.max(20,Math.round(Math.min(w,h)/16));
+      rows=targetCells;
+      // y-pitch from height
+      const pitchY=h/(rows+2*marginY);
+      // x-pitch from width so the grid spans the full canvas
+      const targetColsX=targetCells;
+      const pitchX=w/(targetColsX+2*marginX);
+      pitch=Math.min(pitchX,pitchY); // cells stay roughly square
+      // Re-derive cols based on the chosen pitch
+      cols=Math.max(6,Math.round(w/pitch - 2*marginX));
+      ox=(w-cols*pitch)/2;oy=(h-rows*pitch)/2;
+      const n=cols*rows;
+      target=new Uint8Array(n);live=new Float32Array(n);from=new Float32Array(n);
+      delay=new Float32Array(n);rnd=new Float32Array(n);prog=new Float32Array(n);
+      dir=new Float32Array(n);bore=new Float32Array(n);
+      for(let i=0;i<n;i++)rnd[i]=hash(i*1.37+0.5);
+      applyScene(SCENES[sceneIdx],true);
+    }
+    function applyScene(scene,instant){
+      /* Spell the preset's WHOLE word (DEFAULT -> "BONK") instead of one letter at a
+         time. A single letter per scene can never read as a word — that was the other
+         half of why the grid never clearly said "bonk". LETTERS still defines it. */
+      const word=LETTERS.join("");
+      const next=rasterize(scene,cols,rows,fontFamily,word);
+      from.set(live);target=next;
+      for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const i=y*cols+x;delay[i]=cellDelay(scene.transition,x,y,cols,rows,rnd[i])}
+      if(instant){for(let i=0;i<next.length;i++)live[i]=next[i];from.set(live)}
+    }
+    function advance(){
+      prevScene=sceneIdx;sceneIdx=(sceneIdx+1)%SCENES.length;
+      letterIdx=(letterIdx+1)%LETTERS.length;
+      prevPalette=SCENES[(sceneIdx-1+SCENES.length)%SCENES.length].palette;
+      paletteMix=0;phase="morph";phaseT=0;styleT=0;
+      applyScene(SCENES[sceneIdx],false);
+    }
+    function step(dt){
+      phaseT+=dt*1000;
+      if(phase==="hold"&&phaseT>=HOLD_MS){advance()}
+      else if(phase==="morph"&&phaseT>=MORPH_MS){phase="hold";phaseT=0}
+      const p=phase==="morph"?Math.min(1,phaseT/MORPH_MS):1;
+      const n=cols*rows;
+      for(let i=0;i<n;i++){const d=delay[i];const local=Math.min(1,Math.max(0,(p-d*MORPH_SPREAD)/MORPH_WINDOW));const e=smootherstep(local);live[i]=from[i]+(target[i]-from[i])*e;const changing=from[i]!==target[i]&&phase==="morph";prog[i]=changing?local:0;dir[i]=target[i]>from[i]?1:-1}
+      paletteMix=Math.min(1,paletteMix+dt*(1000/(PALETTE_RAMP*MORPH_MS)));
+      styleT=phase==="morph"?Math.min(1,styleT+dt/(MORPH_MS/1000)):1;
+      styleField(SCENES[sceneIdx],cols,rows,styleT,bore,SCENES[prevScene]);
+    }
+    function draw(dt){
+      if(!ctx)return;step(dt);clockT+=dt;
+      const W=canvas.width,H=canvas.height,s=dpr;
+      const scene=SCENES[sceneIdx];
+      const [cA,bA]=PALETTES[prevPalette%PALETTES.length];
+      const [cB,bB]=PALETTES[scene.palette%PALETTES.length];
+      const m=easeInOut(paletteMix);const circle=mixHex(cA,cB,m);const back=mixHex(bA,bB,m);
+      ctx.fillStyle=back;ctx.fillRect(0,0,W,H);
+      const pitchS=pitch*s,r=pitchS/2,sq=0;
+      ctx.fillStyle=circle;const solidPath=new Path2D();
+      const stroke=Math.max(1.1*s,r*0.30);const brush=2.0;
+      for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+        const i=y*cols+x;let v=live[i];
+        if(v<=0.004){
+          /* Letterform cell — the letter IS this void, so the grain goes here. Driven
+             by a sine off a static per-cell phase, so it shimmers smoothly instead of
+             flickering between frames. Radius stays well under the cell radius so the
+             counters never close and the word keeps reading. */
+          if(rnd[i]<LETTER_GRAIN_CUT)continue;
+          const gg=LETTER_GRAIN*(0.55+0.45*Math.sin(clockT*1.1+rnd[i]*12.566+hash(i*3.7)*6.283));
+          const gr=r*gg;if(gr<=0.3)continue;
+          const gx=ox*s+(x+0.5)*pitchS,gy=oy*s+(y+0.5)*pitchS;
+          solidPath.moveTo(gx+gr,gy);solidPath.arc(gx,gy,gr,0,Math.PI*2);
+          continue;
+        }
+        if(pointer&&brush>0){const d=Math.hypot(x+0.5-pointer.x,y+0.5-pointer.y);if(d<brush)v*=Math.min(1,(d/brush)**2)}
+        if(v<=0.004)continue;
+        const mo=cellMotion(scene.transition,prog[i],dir[i],rnd[i]);
+        const cx=ox*s+(x+0.5)*pitchS+mo.dx*pitchS;const cy=oy*s+(y+0.5)*pitchS+mo.dy*pitchS;
+        const rr=r*v*mo.scale;if(rr<=0.3)continue;
+        const canRing=rr>3.2*s;const boreV=canRing?(rr-stroke)*bore[i]:0;
+        solidPath.moveTo(cx+rr,cy);
+        if(sq<0.02){solidPath.arc(cx,cy,rr,0,Math.PI*2)}else{roundedSquare(solidPath,cx,cy,rr,sq)}
+        if(boreV>0.4){solidPath.moveTo(cx+boreV,cy);solidPath.arc(cx,cy,boreV,0,Math.PI*2,true)}
+      }
+      ctx.fill(solidPath,"evenodd");
+    }
+    function tick(now){
+      const dt=Math.min((now-lastTime)/1000,1/30);
+      lastTime=now;
+      draw(dt);
+      raf=requestAnimationFrame(tick);
+    }
+    host.addEventListener("pointermove",function(e){
+      const rect=e.currentTarget.getBoundingClientRect();
+      // Subtract the grid's left/top margin (ox, oy in canvas px) so the cursor is in grid-cell units centered on the grid
+      pointer={x:((e.clientX-rect.left)-ox)/pitch,y:((e.clientY-rect.top)-oy)/pitch};
+    });
+    host.addEventListener("pointerleave",function(){pointer=null});
+    host.addEventListener("click",advance);
+    // K = previous preset, L = next preset (case-insensitive)
+    window.addEventListener("keydown",function(e){
+      const k=e.key.toLowerCase();
+      if(k==="k"){applyPreset(presetIdx-1)}
+      else if(k==="l"){applyPreset(presetIdx+1)}
+    });
+    window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change",function(e){
+      if(e.matches){cancelAnimationFrame(raf);draw(0)}else{raf=requestAnimationFrame(tick)};
+    });
+
+    resize();
+    raf=requestAnimationFrame(tick);
+    // Update hint to reflect current preset + letters
+    {
+      const p = PRESETS[presetIdx];
+      const hint = document.getElementById("hint");
+      if (hint) hint.textContent = `${p.name} · ${LETTERS.join(" ")} · K/L to switch · click to advance · cursor to retract`;
+    }
+  </script>
+</body>
+</html>
