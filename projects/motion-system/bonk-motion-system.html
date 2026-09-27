@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bonk! Motion System v1</title>
+<style>
+  :root{
+    /* design.md tokens — brand orange is the ONLY colour on a brand surface */
+    --brand-orange:#ff6b1a;
+    --brand-orange-soft:rgba(255,107,26,0.12);
+    --brand-orange-glow:rgba(255,107,26,0.30);
+    --brand-orange-text:#ffb37a;
+    --black:#000000;
+    --jet:#0b0b0c;
+    --white:#ffffff;
+    --ink-14:rgba(255,255,255,0.14);
+    --ink-08:rgba(255,255,255,0.08);
+    --ink-55:rgba(255,255,255,0.55);
+    --font-ui:'Inter',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;background:var(--black);color:var(--white);font-family:var(--font-ui);overflow:hidden}
+  .wrap{width:100%;height:100%;padding:30px 34px;display:flex;flex-direction:column;gap:20px}
+  header{display:flex;align-items:baseline;justify-content:space-between}
+  header .title{font-size:15px;font-weight:650;letter-spacing:-0.01em}
+  header .title i{font-style:italic;color:var(--brand-orange)}
+  header .meta{font-family:var(--font-mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--ink-55)}
+  .grid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:26px 30px}
+  .panel{position:relative;overflow:hidden}
+  .panel canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .panel .lab{position:absolute;left:0;top:0;font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-55);z-index:2}
+  .panel .num{position:absolute;right:0;top:0;font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.1em;color:rgba(255,255,255,0.30);z-index:2}
+  footer{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.34)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">Bonk<i>!</i> motion system <span style="color:rgba(255,255,255,.4)">v1</span></div>
+    <div class="meta">black · #ff6b1a · 1080p</div>
+  </header>
+
+  <div class="grid">
+    <div class="panel"><canvas id="c1"></canvas><div class="lab">Dot seed</div><div class="num">01</div></div>
+    <div class="panel"><canvas id="c2"></canvas><div class="lab">Cadence settle</div><div class="num">02</div></div>
+    <div class="panel"><canvas id="c3"></canvas><div class="lab">Construction layer</div><div class="num">03</div></div>
+    <div class="panel"><canvas id="c4"></canvas><div class="lab">Resolve</div><div class="num">04</div></div>
+    <div class="panel"><canvas id="c5"></canvas><div class="lab">Circle states</div><div class="num">05</div></div>
+    <div class="panel"><canvas id="c6"></canvas><div class="lab">Slash wipe</div><div class="num">06</div></div>
+    <div class="panel"><canvas id="c7"></canvas><div class="lab">Push-in</div><div class="num">07</div></div>
+    <div class="panel"><canvas id="c8"></canvas><div class="lab">Burst → drift</div><div class="num">08</div></div>
+  </div>
+
+  <footer>
+    <div>music management on crack</div>
+    <div>bonkmusic.app</div>
+  </footer>
+</div>
+
+<script>
+const ORANGE='#ff6b1a', ORANGE_TEXT='#ffb37a', WHITE='#ffffff';
+const GUIDE='rgba(255,255,255,0.20)';
+const SANS="'Inter',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif";
+const MONO="'IBM Plex Mono',ui-monospace,Menlo,monospace";
+
+/* ---------- easings (named in the spec) ---------- */
+const outCubic   = t => 1 - Math.pow(1-t, 3);
+const outExpo    = t => t >= 1 ? 1 : 1 - Math.pow(2, -10*t);
+const inOutCubic = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+const outBack    = t => { const c1=1.70158, c3=c1+1; return 1 + c3*Math.pow(t-1,3) + c1*Math.pow(t-1,2); };
+const clamp01    = t => t < 0 ? 0 : t > 1 ? 1 : t;
+/** normalized progress within [a,b] of a cycle */
+const span = (t,a,b) => clamp01((t-a)/(b-a));
+
+/* ---------- panel harness ---------- */
+function panel(id){
+  const cv=document.getElementById(id), ctx=cv.getContext('2d');
+  let W=0,H=0;
+  function resize(){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,Math.round(W*dpr));
+    cv.height=Math.max(1,Math.round(H*dpr));
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  resize();
+  window.addEventListener('resize',resize);
+  let start=performance.now();
+  function loop(fn){
+    function tick(now){
+      const t=(now-start)/1000;
+      ctx.clearRect(0,0,W,H);
+      fn(t,W,H,ctx);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  return {loop, get W(){return W}, get H(){return H}};
+}
+
+/* =========================================================
+   01 · DOT SEED — one dot is the raw material.
+   grow → hold → ring release
+   ========================================================= */
+panel('c1').loop((t,W,H,ctx)=>{
+  const D=2.6, p=(t%D)/D;
+  const cx=W/2, cy=H/2, R=Math.min(W,H)*0.11;
+  const grow=outBack(span(p,0,0.20));
+  // dot stays present almost the whole cycle so the panel never reads empty
+  const dotA = Math.min(clamp01(grow), 1-span(p,0.80,0.96));
+  if(dotA>0.01){
+    const pulse=1+0.04*Math.sin(p*Math.PI*6);
+    ctx.fillStyle='rgba(255,107,26,'+dotA.toFixed(3)+')';
+    ctx.beginPath();ctx.arc(cx,cy,R*dotA*pulse,0,7);ctx.fill();
+  }
+  // ring releases while the dot is still held
+  const rel=outCubic(span(p,0.42,1.0));
+  if(rel>0 && rel<1){
+    const rr=R*(1+rel*2.6), a=(1-rel)*0.7;
+    ctx.strokeStyle='rgba(255,107,26,'+a.toFixed(3)+')';
+    ctx.lineWidth=1.25;
+    ctx.beginPath();ctx.arc(cx,cy,rr,0,7);ctx.stroke();
+  }
+});
+
+/* =========================================================
+   02 · CADENCE SETTLE — scatter → lattice, per-dot stagger,
+   expo-out. The signature move.
+   ========================================================= */
+panel('c2').loop((t,W,H,ctx)=>{
+  const D=4.2, p=(t%D)/D;
+  const COLS=9, ROWS=5;
+  const spanX=W*0.66, spanY=H*0.50;
+  const x0=(W-spanX)/2, y0=(H-spanY)/2;
+  const cellX=spanX/(COLS-1), cellY=spanY/(ROWS-1);
+  const R=Math.min(cellX,cellY)*0.30;
+  const settleP=span(p,0.10,0.72);
+  const outP=span(p,0.86,1.0);
+  for(let j=0;j<ROWS;j++){
+    for(let i=0;i<COLS;i++){
+      const gx=x0+i*cellX, gy=y0+j*cellY;
+      const seed=((i*7+j*13)%17)/17;
+      // scattered origin, deterministic per dot
+      const ang=(i*2.399+j*1.7);
+      const dist=(0.35+seed*0.5)*Math.max(W,H)*0.42;
+      const sx=W/2+Math.cos(ang)*dist;
+      const sy=H/2+Math.sin(ang)*dist;
+      const delay=(i+j)*0.028+seed*0.06;
+      const q=outExpo(clamp01((settleP-delay)/(1-0.02)));
+      const x=sx+(gx-sx)*q, y=sy+(gy-sy)*q;
+      let a=0.20+0.80*q;
+      a*= (1-outP);
+      if(a<=0.01) continue;
+      ctx.fillStyle='rgba(255,107,26,'+a.toFixed(3)+')';
+      ctx.beginPath();ctx.arc(x,y,R*(0.55+0.45*q),0,7);ctx.fill();
+    }
+  }
+});
+
+/* =========================================================
+   03 · CONSTRUCTION LAYER — hairline guides draw on,
+   mark resolves, scaffolding wipes off.
+   ========================================================= */
+panel('c3').loop((t,W,H,ctx)=>{
+  const D=5.0, p=(t%D)/D;
+  const cx=W/2, cy=H/2;
+  const size=Math.min(W*0.30, H*0.30);
+  // guide y positions
+  const capY=cy-size*0.52, xH=cy-size*0.18, baseY=cy+size*0.34;
+  const drawP=outExpo(span(p,0.04,0.46));
+  const wipeP=span(p,0.74,1.0);
+
+  const gx0=cx-size*1.15, gx1=cx+size*1.15;
+  function guide(y,alpha){
+    const w=(gx1-gx0)*drawP*(1-wipeP);
+    if(w<=0.5) return;
+    ctx.strokeStyle='rgba(255,255,255,'+(alpha*(1-wipeP)).toFixed(3)+')';
+    ctx.lineWidth=0.8;
+    ctx.beginPath();ctx.moveTo(gx0,y);ctx.lineTo(gx0+w,y);ctx.stroke();
+  }
+  guide(capY,0.22); guide(xH,0.14); guide(baseY,0.30);
+
+  // tick marks along baseline
+  const ticks=13;
+  ctx.strokeStyle='rgba(255,255,255,'+(0.18*(1-wipeP)).toFixed(3)+')';
+  ctx.lineWidth=0.8;
+  for(let i=0;i<ticks;i++){
+    const q=outExpo(clamp01((drawP-i*0.045)/(1-0.3)));
+    if(q<=0) continue;
+    const x=gx0+(gx1-gx0)*(i/(ticks-1));
+    const hgt=4*q;
+    ctx.beginPath();ctx.moveTo(x,baseY+7);ctx.lineTo(x,baseY+7+hgt);ctx.stroke();
+  }
+
+  // resolve: outline → orange fill
+  const fillP=span(p,0.42,0.68);
+  const fs=size*0.86;
+  ctx.font='700 '+fs.toFixed(1)+'px '+SANS;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.globalAlpha=(1-wipeP);
+  if(fillP<1){
+    ctx.strokeStyle='rgba(255,255,255,0.42)';
+    ctx.lineWidth=Math.max(1,fs*0.018);
+    ctx.strokeText('Bonk',cx,cy);
+  }
+  if(fillP>0){
+    ctx.globalAlpha=fillP*(1-wipeP);
+    ctx.fillStyle=ORANGE;
+    ctx.fillText('Bonk',cx,cy);
+  }
+  ctx.globalAlpha=1;
+});
+
+/* =========================================================
+   04 · RESOLVE — ghost outline → solid, offset handoff
+   ========================================================= */
+panel('c4').loop((t,W,H,ctx)=>{
+  const D=3.2, p=(t%D)/D;
+  const cx=W/2, cy=H/2;
+  const fs=Math.min(W*0.30,H*0.34);
+  const slide=outExpo(span(p,0.12,0.56));
+  const dx=(1-slide)*fs*0.55;
+  const ghost=1-span(p,0.30,0.70);
+
+  ctx.font='700 '+fs.toFixed(1)+'px '+SANS;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+
+  if(ghost>0.01){
+    ctx.globalAlpha=ghost*0.55;
+    ctx.strokeStyle=WHITE; ctx.lineWidth=Math.max(1,fs*0.02);
+    ctx.strokeText('Bonk',cx,cy);
+    ctx.globalAlpha=1;
+  }
+  ctx.globalAlpha=slide;
+  ctx.fillStyle=ORANGE;
+  ctx.fillText('Bonk',cx+dx,cy);
+  ctx.globalAlpha=1;
+});
+
+/* =========================================================
+   05 · CIRCLE STATES — solid → ring → halftone
+   ========================================================= */
+panel('c5').loop((t,W,H,ctx)=>{
+  const D=5.4, p=(t%D)/D;
+  const cx=W/2, cy=H/2, R=Math.min(W,H)*0.22;
+  const ph=p*3; // three states
+  const idx=Math.floor(ph)%3;
+  const local=ph-Math.floor(ph);
+  const cross=inOutCubic(clamp01((local-0.72)/0.28)); // blend to next
+
+  // idx 0 = solid, idx 1 = ring, idx 2 = halftone — crossfade at boundaries
+  let solidA, ringA, halftA;
+  if(idx===0){ solidA=1-cross; ringA=cross; halftA=0; }
+  else if(idx===1){ solidA=0; ringA=1-cross; halftA=cross; }
+  else { solidA=cross; ringA=0; halftA=1-cross; }
+
+  if(solidA>0.01){ ctx.fillStyle='rgba(255,107,26,'+solidA.toFixed(3)+')';
+    ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.fill(); }
+
+  if(ringA>0.01){ ctx.strokeStyle='rgba(255,107,26,'+ringA.toFixed(3)+')';
+    ctx.lineWidth=1.4; ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.stroke(); }
+
+  if(halftA>0.01){
+    const step=R*0.235, dotR=R*0.055;
+    for(let y=-R;y<=R;y+=step){
+      for(let x=-R;x<=R;x+=step){
+        const d=Math.sqrt(x*x+y*y);
+        if(d>R-dotR) continue;
+        const fade=1-(d/R)*0.45;
+        ctx.fillStyle='rgba(255,107,26,'+(halftA*fade).toFixed(3)+')';
+        ctx.beginPath();ctx.arc(cx+x,cy+y,dotR,0,7);ctx.fill();
+      }
+    }
+  }
+});
+
+/* =========================================================
+   06 · SLASH WIPE — soft diagonal reveal between scenes
+   ========================================================= */
+panel('c6').loop((t,W,H,ctx)=>{
+  const D=6.0, p=(t%D)/D;
+  const cx=W/2, cy=H/2;
+  const fs=Math.min(W*0.26,H*0.26);
+
+  function mark(color,label){
+    ctx.font='700 '+fs.toFixed(1)+'px '+SANS;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=color;
+    ctx.fillText('Bonk',cx,cy);
+    ctx.font='500 9.5px '+MONO;
+    ctx.fillStyle=color==='#000000'?'rgba(0,0,0,0.62)':'rgba(255,255,255,0.55)';
+    ctx.fillText(label,cx,cy+fs*0.66);
+  }
+
+  // scene A (black)
+  mark('#ffffff','scene a');
+
+  // wipe: reveal the orange scene along the diagonal x + y <= thr
+  const wipe=inOutCubic(span(p,0.22,0.60));
+  const back=inOutCubic(span(p,0.74,0.96));
+  const prog=clamp01(wipe*(1-back));
+  if(prog>0.002){
+    const thr=prog*(W+H);
+    ctx.save();
+    ctx.beginPath();
+    if(thr<=0){
+      ctx.rect(0,0,0,0);
+    } else if(thr<=H){
+      // triangle from the top-left corner
+      ctx.moveTo(0,0); ctx.lineTo(thr,0); ctx.lineTo(0,thr);
+    } else if(thr<=W){
+      ctx.moveTo(0,0); ctx.lineTo(thr,0); ctx.lineTo(thr-H,H); ctx.lineTo(0,H);
+    } else if(thr<W+H){
+      ctx.moveTo(0,0); ctx.lineTo(W,0); ctx.lineTo(W,thr-W); ctx.lineTo(thr-H,H); ctx.lineTo(0,H);
+    } else {
+      ctx.rect(0,0,W,H);
+    }
+    ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle=ORANGE;
+    ctx.fillRect(0,0,W,H);
+    mark('#000000','scene b');
+    ctx.restore();
+    // soft slash edge along x + y = thr
+    if(thr>0 && thr<W+H){
+      ctx.strokeStyle='rgba(255,255,255,0.35)';
+      ctx.lineWidth=1.1;
+      ctx.beginPath();
+      if(thr<=W){ ctx.moveTo(thr,0); ctx.lineTo(0,thr); }
+      else { ctx.moveTo(W,thr-W); ctx.lineTo(thr-H,H); }
+      ctx.stroke();
+    }
+  }
+});
+
+/* =========================================================
+   07 · PUSH-IN — slow buttery drift, premium feel
+   ========================================================= */
+panel('c7').loop((t,W,H,ctx)=>{
+  const D=7.0, p=(t%D)/D;
+  const cx=W/2, cy=H/2;
+  const q=inOutCubic(p);
+  const scale=0.90+q*0.22;
+  const driftY=(q-0.5)*H*0.03;
+  const fade=Math.min(1, span(p,0.02,0.16)*(1-span(p,0.84,0.99)));
+
+  ctx.save();
+  ctx.translate(cx, cy+driftY);
+  ctx.scale(scale,scale);
+  ctx.globalAlpha=fade;
+
+  const R=Math.min(W,H)*0.30;
+  ctx.strokeStyle='rgba(255,107,26,0.85)';
+  ctx.lineWidth=1.5/scale;
+  ctx.beginPath();ctx.arc(0,0,R,0,7);ctx.stroke();
+
+  ctx.font='700 '+(R*0.62).toFixed(1)+'px '+SANS;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=ORANGE;
+  ctx.fillText('Bonk',0,0);
+
+  ctx.font='500 9.5px '+MONO;
+  ctx.fillStyle='rgba(255,255,255,0.5)';
+  ctx.fillText('slowed 2x reference',0,R*1.35);
+  ctx.restore();
+  ctx.globalAlpha=1;
+});
+
+/* =========================================================
+   08 · BURST → DRIFT — one circle shatters, drifts out
+   ========================================================= */
+panel('c8').loop((t,W,H,ctx)=>{
+  const D=4.0, p=(t%D)/D;
+  const cx=W/2, cy=H/2;
+  const R=Math.min(W,H)*0.15;
+
+  const burst=span(p,0.30,0.62);
+  const coreA=1-span(p,0.28,0.44);
+  const outA=1-span(p,0.76,1.0);
+
+  if(coreA>0.01){
+    ctx.fillStyle='rgba(255,107,26,'+coreA.toFixed(3)+')';
+    ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.fill();
+  }
+
+  const N=9;
+  for(let i=0;i<N;i++){
+    const ang=(i/N)*Math.PI*2 - Math.PI/2;
+    const stagger=(i%3)*0.06 + (i/N)*0.10;
+    const q=outExpo(clamp01((burst-stagger)/(1-0.15)));
+    if(q<=0) continue;
+    const dist=q*Math.min(W,H)*0.40;
+    const x=cx+Math.cos(ang)*dist, y=cy+Math.sin(ang)*dist;
+    const r=R*(0.34-0.14*q);
+    const a=(0.20+0.80*(1-q*0.35))*outA;
+    ctx.fillStyle='rgba(255,107,26,'+a.toFixed(3)+')';
+    ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+  }
+});
+</script>
+</body>
+</html>

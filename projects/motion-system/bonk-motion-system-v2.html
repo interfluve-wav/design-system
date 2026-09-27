@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>BONK — motion system v2 (real mark)</title>
+<style>
+  @font-face {
+    font-family: 'PlexMono Bonk';
+    src: url('../blueprint/public/fonts/IBMPlexMono-Regular.ttf') format('truetype');
+    font-weight: 400; font-display: block;
+  }
+  @font-face {
+    font-family: 'PlexMono Bonk';
+    src: url('../blueprint/public/fonts/IBMPlexMono-SemiBold.ttf') format('truetype');
+    font-weight: 600; font-display: block;
+  }
+  /* ── THEME ────────────────────────────────────────────────────────────────
+     Colour lives HERE, not in the JS constants below. Those only carry the
+     fallback; applyTheme() copies these values in at boot, so a variant is a
+     variable change rather than a code edit.
+     Brand default (design.md): jet black ground, ONE orange accent. */
+  :root{
+    --ground:#000000;
+    --ink:#ffffff;
+    --accent:#ff6b1a;
+    --accent-soft:#ffb37a;
+    --hair:rgba(255,255,255,0.30);
+    --hair-dim:rgba(255,255,255,0.16);
+    --hair-bright:rgba(255,255,255,0.62);
+    --label:rgba(255,255,255,0.44);
+  }
+  html, body { margin: 0; height: 100%; background: var(--ground); overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- single source of truth for the wordmark geometry: the traced paths produced
+     by blueprint/src/trace.py. Do not copy these into this file. -->
+<script src="../blueprint/public/wordmark-paths.js"></script>
+<script>
+/**
+ * BONK — motion system v2
+ *
+ * v1 of this page demonstrated all eight primitives with ctx.fillText('Bonk').
+ * That was wrong: the brand mark is not a font. It exists as traced vector
+ * geometry (window.BONK_MARK, IoU 0.9905 against the source raster) carrying
+ * per-letter column windows and an ink profile, and every primitive reads
+ * differently — and better — on the real thing.
+ *
+ * So v2 renders the actual mark, loaded from the bluepoint trace pipeline rather
+ * than re-declared here. Vector geometry also gives the primitives material that
+ * live text cannot: subpaths that can scatter and settle, a contour that can be
+ * drawn on by arc length, windowed fills.
+ *
+ * House rules (bonk design.md): jet black canvas, ONE accent (#ff6b1a), mono
+ * hairlines, no gradients, no noise, no borders.
+ *
+ * Rendering is a pure function of time: renderAt(t). The rAF loop drives preview;
+ * __seek(t) drives capture, so the exported GIF is frame-identical to playback.
+ */
+
+/* Colour comes from the CSS custom properties in :root — CSS is the source of
+   truth, and these are only the fallbacks. They're `let` and mirrored from CSS by
+   applyTheme() because getComputedStyle() is far too slow to call per frame. */
+let ACCENT      = '#ff6b1a';
+let ACCENT_SOFT = '#ffb37a';
+let HAIR        = 'rgba(255,255,255,0.30)';
+let HAIR_DIM    = 'rgba(255,255,255,0.16)';
+let HAIR_BRIGHT = 'rgba(255,255,255,0.62)';
+let LABEL       = 'rgba(255,255,255,0.44)';
+let GROUND      = '#000000';
+let INK         = '#ffffff';
+
+function applyTheme(){
+  const cs = getComputedStyle(document.documentElement);
+  const g = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
+  ACCENT      = g('--accent',      ACCENT);
+  ACCENT_SOFT = g('--accent-soft', ACCENT_SOFT);
+  HAIR        = g('--hair',        HAIR);
+  HAIR_DIM    = g('--hair-dim',    HAIR_DIM);
+  HAIR_BRIGHT = g('--hair-bright', HAIR_BRIGHT);
+  LABEL       = g('--label',       LABEL);
+  GROUND      = g('--ground',      GROUND);
+  INK         = g('--ink',         INK);
+}
+/* Re-reads the CSS variables AND repaints — re-reading alone leaves a stale frame
+   whenever the rAF loop has been cancelled by __seek(). */
+function applyThemeAndRedraw(){ applyTheme(); renderAt(lastT); }
+window.__applyTheme = applyThemeAndRedraw;
+window.__theme = () => ({ ground: GROUND, ink: INK, accent: ACCENT, accentSoft: ACCENT_SOFT });
+
+/* Safe to read here: the <style> block above is already applied. */
+applyTheme();
+
+/* all panels share one period and differ only by phase, so the whole grid loops
+   seamlessly and no panel is ever mid-cycle at the wrap. */
+const PERIOD = 4.4;
+const DURATION = PERIOD;
+
+const COLS = 4, ROWS = 2;
+
+/* ── easing ─────────────────────────────────────────────────────────────── */
+const clamp01  = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+const expoOut  = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const cubicOut = (t) => 1 - Math.pow(1 - t, 3);
+const power4Out= (t) => 1 - Math.pow(1 - t, 4);
+const inOut    = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+const cubicInOut = (t) => (t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2);
+const lerp = (a, b, t) => a + (b - a) * t;
+/** progress within [a,b], clamped */
+const win = (t, a, b) => clamp01((t - a) / (b - a));
+/** deterministic per-index pseudo-random in [0,1) */
+const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+
+/* ── geometry ───────────────────────────────────────────────────────────── */
+const MARK = window.BONK_MARK;
+if (!MARK) throw new Error('wordmark-paths.js did not load — check ../blueprint/public/');
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+const u = (n) => n * (H / 1080);
+
+/* hidden SVG host used only to measure path length / sample points */
+const sampleSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+sampleSvg.setAttribute('width', '0');
+sampleSvg.setAttribute('height', '0');
+sampleSvg.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
+document.body.appendChild(sampleSvg);
+
+/** Split an absolute-only path string into one string per subpath. */
+function splitSubpaths(d) {
+  const out = [];
+  for (const part of d.split(/(?=M )/)) if (part.trim().startsWith('M')) out.push(part.trim());
+  return out;
+}
+
+/**
+ * Sample each subpath into a polyline in MARK units (not screen space) so the
+ * points can be re-projected into any panel without re-measuring.
+ */
+function sampleSubpaths(d) {
+  return splitSubpaths(d).map((sub) => {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', sub);
+    sampleSvg.appendChild(p);
+    const total = p.getTotalLength();
+    const steps = Math.max(16, Math.round(total / 3));
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const pt = p.getPointAtLength((i / steps) * total);
+      pts.push({ x: pt.x, y: pt.y });
+    }
+    p.remove();
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    return { pts, len };
+  });
+}
+
+/** uniform point sampling across ALL subpaths, for scatter->settle */
+function flattenPoints(subpaths, perSub) {
+  const out = [];
+  subpaths.forEach((seg, si) => {
+    const step = Math.max(1, Math.floor(seg.pts.length / perSub));
+    for (let i = 0; i < seg.pts.length; i += step) out.push({ x: seg.pts[i].x, y: seg.pts[i].y, si });
+  });
+  return out;
+}
+
+const SUBPATHS = sampleSubpaths(MARK.d);
+const TOTAL_LEN = SUBPATHS.reduce((n, s) => n + s.len, 0) || 1;
+const SCATTER_PTS = flattenPoints(SUBPATHS, 26);
+
+/* ── panels ─────────────────────────────────────────────────────────────── */
+/** Content box as fractions, then a grid split. No drawn borders. */
+const BOX = { l: 0.030, t: 0.150, r: 0.970, b: 0.900 };
+const GAP = { x: 0.020, y: 0.055 };
+
+let PANELS = [];
+
+function layout() {
+  W = window.innerWidth; H = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+
+  const x0 = BOX.l * W, x1 = BOX.r * W;
+  const y0 = BOX.t * H, y1 = BOX.b * H;
+  const pw = (x1 - x0 - GAP.x * W * (COLS - 1)) / COLS;
+  const ph = (y1 - y0 - GAP.y * H * (ROWS - 1)) / ROWS;
+
+  PANELS = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const i = r * COLS + c;
+      const px = x0 + c * (pw + GAP.x * W);
+      const py = y0 + r * (ph + GAP.y * H);
+      PANELS.push(makePanel(i, px, py, pw, ph));
+    }
+  }
+}
+
+function makePanel(i, px, py, pw, ph) {
+  /* fit the mark to ~62% of the panel width, centred */
+  const targetW = Math.min(pw * 0.62, (ph * 0.72) * (MARK.width / MARK.height));
+  const s = targetW / MARK.width;
+  const mw = MARK.width * s, mh = MARK.height * s;
+  const ox = px + (pw - mw) / 2;
+  const oy = py + (ph - mh) / 2;
+
+  const m = new DOMMatrix().translate(ox, oy).scale(s, s);
+  const path = new Path2D();
+  path.addPath(new Path2D(MARK.d), m);
+
+  return {
+    i, px, py, pw, ph,
+    ox, oy, s, mw, mh, m,
+    path,
+    cx: ox + mw / 2, cy: oy + mh / 2,
+    left: ox, right: ox + mw, top: oy, bot: oy + mh,
+    letters: MARK.letters.map((l) => ({ x0: ox + l.x0 * s, x1: ox + l.x1 * s, w: l.w })),
+    phase: i / (COLS * ROWS),          // desynchronise the grid
+  };
+}
+
+const P2 = (p, P) => ({ x: P.ox + p.x * P.s, y: P.oy + p.y * P.s });
+
+/* ── drawing helpers ────────────────────────────────────────────────────── */
+function hair(x1, y1, x2, y2, color, w) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w || 1;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+
+function mono(size, weight) {
+  ctx.font = `${weight || 400} ${size}px 'PlexMono Bonk', ui-monospace, monospace`;
+}
+
+function text(str, x, y, color, size, align, weight) {
+  mono(size || 12, weight);
+  ctx.fillStyle = color;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(str, x, y);
+}
+
+/** horizontal rule growing from its centre — the blueprint draw-on feel */
+function hairCentre(y, cx, half, p, color, w) {
+  const h = half * expoOut(p);
+  hair(cx - h, y, cx + h, y, color, w);
+}
+
+/* ── the eight primitives ───────────────────────────────────────────────── */
+/* Each takes (P, ph) where ph is 0..1 local progress through its own cycle.  */
+
+/* 01 — dot seed: one dot is the raw material, a ring releases, the mark rises */
+function primSeed(P, ph) {
+  const grow = win(ph, 0, 0.16);
+  const ring = win(ph, 0.06, 0.42);
+  const markP = win(ph, 0.18, 0.55);
+
+  if (markP > 0) {
+    ctx.globalAlpha = cubicOut(markP) * (1 - win(ph, 0.94, 1));
+    ctx.fillStyle = ACCENT;
+    ctx.fill(P.path);
+    ctx.globalAlpha = 1;
+  }
+  if (ring < 1) {
+    ctx.globalAlpha = 0.34 * (1 - ring);
+    ctx.strokeStyle = HAIR_BRIGHT;
+    ctx.lineWidth = 1;
+    const r = u(10) + u(150) * expoOut(ring);
+    ctx.beginPath(); ctx.arc(P.cx, P.cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (grow < 1 || ph < 0.30) {
+    const bp = win(ph, 0, 0.30);
+    ctx.fillStyle = ACCENT;
+    ctx.beginPath();
+    ctx.arc(P.cx, P.cy, u(3) + u(9) * expoOut(grow) * (1 - 0.8 * bp), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* 02 — cadence settle: the contour points scatter, then land with a stagger */
+function primCadence(P, ph) {
+  const settle = win(ph, 0.10, 0.62);
+  const fade = win(ph, 0.68, 0.88);
+
+  SCATTER_PTS.forEach((pt, i) => {
+    const seed = hash(i * 1.7 + 3.1);
+    const seed2 = hash(i * 2.3 + 11.9);
+    const ang = seed * Math.PI * 2;
+    const dist = (u(60) + u(180) * seed2);
+    /* per-point stagger across the set — this is the "cadence" */
+    const local = clamp01((settle - (i / SCATTER_PTS.length) * 0.35) / 0.65);
+    const e = expoOut(local);
+    const off = (1 - e) * dist;
+    const sp = P2(pt, P);
+    const x = sp.x + Math.cos(ang) * off;
+    const y = sp.y + Math.sin(ang) * off;
+    ctx.globalAlpha = (0.30 + 0.70 * e) * (1 - fade);
+    ctx.fillStyle = e > 0.92 ? ACCENT : ACCENT_SOFT;
+    const r = u(1.5);
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  });
+  ctx.globalAlpha = 1;
+
+  if (settle > 0.55) {
+    ctx.globalAlpha = win(settle, 0.55, 1) * (1 - fade);
+    ctx.fillStyle = ACCENT;
+    ctx.fill(P.path);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* 03 — construction layer: guides draw on, measure, then retract */
+function primConstruction(P, ph) {
+  const guidesIn = win(ph, 0.04, 0.40);
+  const retract  = win(ph, 0.72, 0.92);
+  const a = 1 - retract;
+  const { top, bot, left, right, cx, cy } = P;
+
+  ctx.globalAlpha = a;
+  hairCentre(top, cx, P.mw / 2 + u(26), win(ph, 0.04, 0.34), HAIR, 1);
+  hairCentre(bot, cx, P.mw / 2 + u(26), win(ph, 0.08, 0.38), HAIR, 1);
+
+  /* vertical rules at the measured letter-window edges */
+  P.letters.forEach((l, i) => {
+    const st = 0.20 + i * 0.05;
+    const p = win(ph, st, st + 0.22);
+    if (p <= 0) return;
+    const h = (MARK.height / 2 + u(16)) * P.s * expoOut(p);
+    ctx.globalAlpha = 0.45 * a;
+    [l.x0, l.x1].forEach((x) => hair(Math.round(x) + 0.5, cy - h, Math.round(x) + 0.5, cy + h, HAIR_DIM, 1));
+  });
+
+  /* the mark arrives as a hairline, then fills */
+  const solid = win(ph, 0.44, 0.70);
+  ctx.globalAlpha = a * (1 - solid);
+  ctx.strokeStyle = HAIR_BRIGHT;
+  ctx.lineWidth = 1.2;
+  ctx.stroke(P.path);
+  if (solid > 0) {
+    ctx.globalAlpha = a * cubicOut(solid);
+    ctx.fillStyle = ACCENT;
+    ctx.fill(P.path);
+  }
+
+  /* dimension across the width */
+  if (guidesIn > 0.5) {
+    const p = clamp01((guidesIn - 0.5) / 0.5);
+    const y = top - u(30);
+    const half = (P.mw / 2) * expoOut(p);
+    ctx.globalAlpha = a;
+    hair(cx - half, y + 0.5, cx + half, y + 0.5, HAIR, 1);
+    [-half, half].forEach((dx) => hair(cx + dx + 0.5, y - u(5), cx + dx + 0.5, y + u(5), HAIR, 1));
+    if (p > 0.8) {
+      ctx.globalAlpha = a * clamp01((p - 0.8) / 0.2);
+      text(fmt(MARK.width), cx, y - u(8), ACCENT_SOFT, u(11), 'center', 600);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* 04 — contour draw-on: the outline traced by arc length across subpaths */
+function primContour(P, ph) {
+  const draw = win(ph, 0.06, 0.62);
+  const fill = win(ph, 0.58, 0.84);
+  const out  = win(ph, 0.92, 1);
+  const a = 1 - out;
+
+  if (fill > 0) {
+    ctx.globalAlpha = a * cubicOut(fill);
+    ctx.fillStyle = ACCENT;
+    ctx.fill(P.path);
+    ctx.globalAlpha = 1;
+  }
+
+  /* subpaths ordered by x so the trace reads left -> right like handwriting */
+  const ordered = SUBPATHS.slice().sort((s1, s2) => minX(s1.pts) - minX(s2.pts));
+  let cum = 0;
+  ctx.strokeStyle = HAIR_BRIGHT;
+  ctx.lineWidth = 1.3;
+  ctx.globalAlpha = a;
+  ordered.forEach((seg) => {
+    const share = seg.len / TOTAL_LEN;
+    const segStart = (cum / TOTAL_LEN) * 0.86;
+    cum += seg.len;
+    const local = clamp01((draw - segStart) / Math.max(0.10, share));
+    if (local <= 0) return;
+    strokePartial(seg.pts, P, local);
+  });
+  ctx.globalAlpha = 1;
+}
+
+/** Draw the first `p` fraction of a polyline projected into panel P. */
+function strokePartial(pts, P, p) {
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+  const target = total * p;
+  ctx.beginPath();
+  let acc = 0, started = false;
+  for (let i = 0; i < pts.length; i++) {
+    const q = P2(pts[i], P);
+    if (i > 0) acc += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    if (acc > target) {
+      if (started) ctx.lineTo(q.x, q.y);
+      break;
+    }
+    if (!started) { ctx.moveTo(q.x, q.y); started = true; } else ctx.lineTo(q.x, q.y);
+  }
+  ctx.stroke();
+}
+
+const minX = (pts) => pts.reduce((v, p) => Math.min(v, p.x), Infinity);
+
+/* 05 — per-letter resolve: each letter window wipes left -> right in sequence */
+function primResolve(P, ph) {
+  const stagger = 0.055;
+  const dur = 0.24;
+  const out = win(ph, 0.94, 1);
+  const a = 1 - out;
+
+  /* hairline outline first */
+  ctx.globalAlpha = a * 0.55;
+  ctx.strokeStyle = HAIR_BRIGHT;
+  ctx.lineWidth = 1.1;
+  ctx.stroke(P.path);
+  ctx.globalAlpha = 1;
+
+  const per = P.letters.map((l, i) => {
+    const st = 0.10 + i * stagger;
+    return power4Out(win(ph, st, st + dur));
+  });
+
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.beginPath();
+  per.forEach((p, i) => {
+    if (p <= 0) return;
+    const w = P.letters[i];
+    ctx.rect(w.x0, P.top - u(10), (w.x1 - w.x0) * p, P.mh + u(20));
+  });
+  ctx.clip();
+  ctx.fillStyle = ACCENT;
+  ctx.fill(P.path);
+  ctx.restore();
+
+  /* bright front line at each active wipe edge */
+  per.forEach((p, i) => {
+    if (p <= 0.001 || p >= 0.999) return;
+    const w = P.letters[i];
+    const x = Math.round(lerp(w.x0, w.x1, p)) + 0.5;
+    ctx.globalAlpha = a * 0.85;
+    hair(x, P.top - u(8), x, P.bot + u(8), ACCENT_SOFT, 1);
+    ctx.globalAlpha = 1;
+  });
+}
+
+/* 06 — slash wipe: diagonal reveal. Region is x + y <= thr (see skill notes:
+   the naive polygon parks the reveal off-panel and renders 0%, silently). */
+function primSlash(P, ph) {
+  const prog = cubicInOut(win(ph, 0.08, 0.78));
+  const out = win(ph, 0.95, 1);
+  const a = 1 - out;
+
+  const rx0 = P.left - u(20), ry0 = P.top - u(20);
+  const w = P.mw + u(40), h = P.mh + u(40);
+  const thr = prog * (w + h);
+
+  ctx.globalAlpha = a * 0.5;
+  ctx.strokeStyle = HAIR;
+  ctx.lineWidth = 1;
+  ctx.stroke(P.path);
+  ctx.globalAlpha = 1;
+
+  ctx.save();
+  ctx.beginPath();
+  if (thr <= 0) {
+    /* nothing */
+  } else if (thr >= w + h) {
+    ctx.rect(rx0, ry0, w, h);
+  } else if (thr <= h) {
+    ctx.moveTo(rx0, ry0); ctx.lineTo(rx0 + thr, ry0); ctx.lineTo(rx0, ry0 + thr);
+  } else if (thr <= w) {
+    ctx.moveTo(rx0, ry0); ctx.lineTo(rx0 + thr, ry0);
+    ctx.lineTo(rx0 + thr - h, ry0 + h); ctx.lineTo(rx0, ry0 + h);
+  } else {
+    ctx.moveTo(rx0, ry0); ctx.lineTo(rx0 + w, ry0);
+    ctx.lineTo(rx0 + w, ry0 + (thr - w)); ctx.lineTo(rx0 + thr - h, ry0 + h); ctx.lineTo(rx0, ry0 + h);
+  }
+  ctx.clip();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = ACCENT;
+  ctx.fill(P.path);
+  ctx.restore();
+
+  /* the wiping edge itself */
+  if (prog > 0.001 && prog < 0.999) {
+    const px = rx0 + thr, py = ry0;
+    const qx = rx0, qy = ry0 + thr;
+    const cx = clamp(px, rx0, rx0 + w), cy = clamp(py, ry0, ry0 + h);
+    const dx = clamp(qx, rx0, rx0 + w), dy = clamp(qy, ry0, ry0 + h);
+    ctx.globalAlpha = a * 0.8;
+    hair(cx, cy, dx, dy, ACCENT_SOFT, 1);
+    ctx.globalAlpha = 1;
+  }
+}
+
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+/* 07 — burst -> drift: subpaths shatter outward, decelerate, then regroup */
+function primBurst(P, ph) {
+  const burst = win(ph, 0.06, 0.30);
+  const drift = win(ph, 0.26, 0.80);
+  const back  = win(ph, 0.80, 1);
+
+  const e = expoOut(drift);
+  SUBPATHS.forEach((seg, si) => {
+    const seed = hash(si * 5.3 + 1.7);
+    const ang = seed * Math.PI * 2;
+    const dist = (u(90) + u(170) * hash(si * 3.1 + 7.7));
+    const off = e * dist * (1 - back);
+    const rot = (hash(si * 2.9) - 0.5) * 0.9 * e * (1 - back);
+    const dx = Math.cos(ang) * off, dy = Math.sin(ang) * off;
+
+    ctx.save();
+    ctx.globalAlpha = (0.35 + 0.65 * e) * (1 - 0.5 * back);
+    ctx.translate(P.cx + dx, P.cy + dy);
+    ctx.rotate(rot);
+    ctx.scale(P.s, P.s);
+    ctx.translate(-MARK.width / 2, -MARK.height / 2);
+    ctx.fillStyle = ACCENT;
+    ctx.fill(new Path2D(seg.pts.length ? segPath(seg) : ''));
+    ctx.restore();
+  });
+  ctx.globalAlpha = 1;
+
+  if (back > 0) {
+    ctx.globalAlpha = cubicOut(back);
+    ctx.fillStyle = ACCENT;
+    ctx.fill(P.path);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* rebuild a subpath's `d` from its sampled points (subpath-only fill) */
+function segPath(seg) {
+  let d = `M ${seg.pts[0].x} ${seg.pts[0].y}`;
+  for (let i = 1; i < seg.pts.length; i++) d += ` L ${seg.pts[i].x} ${seg.pts[i].y}`;
+  return d + ' Z';
+}
+
+/* 08 — push-in: slow scale about the optical centre, with guide parallax */
+function primPush(P, ph) {
+  const p = win(ph, 0.05, 0.90);
+  const zoom = 1 + 0.09 * cubicInOut(p);
+  const out = win(ph, 0.92, 1);
+
+  ctx.save();
+  ctx.translate(P.cx, P.cy);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-P.cx, -P.cy);
+
+  /* parallax: guides travel slightly further than the mark */
+  ctx.globalAlpha = (1 - out) * 0.42;
+  const drift2 = (p - 0.5) * u(26);
+  hair(P.left - u(18) + drift2 * 1.6, P.top, P.left - u(18) + drift2 * 1.6, P.bot, HAIR_DIM, 1);
+  hair(P.right + u(18) + drift2 * 1.6, P.top, P.right + u(18) + drift2 * 1.6, P.bot, HAIR_DIM, 1);
+  ctx.globalAlpha = 1;
+
+  ctx.globalAlpha = 1 - out;
+  ctx.fillStyle = ACCENT;
+  ctx.fill(P.path);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+/* ── panel table ────────────────────────────────────────────────────────── */
+const PANEL_DEFS = [
+  { id: '01', label: 'DOT SEED',         fn: primSeed },
+  { id: '02', label: 'CADENCE SETTLE',   fn: primCadence },
+  { id: '03', label: 'CONSTRUCTION',     fn: primConstruction },
+  { id: '04', label: 'CONTOUR DRAW-ON',  fn: primContour },
+  { id: '05', label: 'PER-LETTER RESOLVE', fn: primResolve },
+  { id: '06', label: 'SLASH WIPE',       fn: primSlash },
+  { id: '07', label: 'BURST / DRIFT',    fn: primBurst },
+  { id: '08', label: 'PUSH-IN',          fn: primPush },
+];
+
+const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
+
+/* ── the scene ──────────────────────────────────────────────────────────── */
+let lastT = 0;              // so a theme change can repaint the current frame
+function renderAt(t) {
+  lastT = t;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = GROUND;
+  ctx.fillRect(0, 0, W, H);
+
+  PANELS.forEach((P) => {
+    const def = PANEL_DEFS[P.i];
+    const ph = ((t / PERIOD) + P.phase) % 1;
+
+    ctx.save();
+    /* Registration ghost: the mark is always faintly registered on the sheet.
+       Without it, primitives that resolve to nothing have a dead tail (measured
+       up to 0.60s of a 4.4s loop) and the panel visibly pops on reset. It also
+       keeps the grid comparable — every panel shares one silhouette. */
+    ctx.globalAlpha = 0.09;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.stroke(P.path);
+    ctx.restore();
+
+    ctx.save();
+    def.fn(P, ph);
+    ctx.restore();
+
+    /* label lives outside the primitive's clip; no panel borders (house rule) */
+    text(`${def.id}  ${def.label}`, P.px, P.py - u(9), LABEL, u(11));
+  });
+
+  /* header + footer: the sheet's own labels */
+  text('BONK — MOTION SYSTEM v2', u(58), u(58), ACCENT, u(15), 'left', 600);
+  text('REAL TRACED MARK · IoU 0.9905 · NOT A SUBSTITUTE FONT', u(58), u(80), LABEL, u(11));
+  const rightX = W - u(58);
+  text(`W ${fmt(MARK.width)}  H ${fmt(MARK.metrics.capHeight)}  STROKE ${fmt(MARK.metrics.stemWidth)}`, rightX, u(58), LABEL, u(11), 'right');
+  text(`INK ${MARK.metrics.inkCoveragePct.toFixed(1)}%  LETTERS ${MARK.metrics.letterCount}  SUBPATHS ${SUBPATHS.length}`, rightX, u(80), LABEL, u(11), 'right');
+}
+
+/* ── runtime ────────────────────────────────────────────────────────────── */
+const params = new URLSearchParams(location.search);
+let fixedT = params.has('t') ? parseFloat(params.get('t')) : null;
+let rafId = 0;
+
+layout();
+window.addEventListener('resize', () => { layout(); if (fixedT !== null) renderAt(fixedT); });
+
+window.__seek = (t) => {
+  /* stop the preview loop first, or rAF keeps drawing its own clock between the
+     seek and the screenshot and captures come out mixed. */
+  fixedT = t;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+  renderAt(t);
+};
+window.__duration = DURATION;
+window.__granularity = PERIOD / 8;
+window.__ready = (async () => {
+  try { await document.fonts.load("400 12px 'PlexMono Bonk'"); } catch (e) {}
+  try { await document.fonts.load("600 12px 'PlexMono Bonk'"); } catch (e) {}
+  await document.fonts.ready;
+  if (fixedT !== null) renderAt(fixedT);
+  return true;
+})();
+
+if (fixedT === null) {
+  const t0 = performance.now();
+  const loop = (now) => {
+    renderAt(((now - t0) / 1000) % DURATION);
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
+} else {
+  renderAt(fixedT);
+}
+</script>
+</body>
+</html>

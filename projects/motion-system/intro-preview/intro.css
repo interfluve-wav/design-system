@@ -1,0 +1,126 @@
+/* src/components/WelcomeIntro.css */
+@font-face {
+  font-family: "JetBrains Mono Bonk Intro";
+  src: url("./assets/jetbrains-mono-extrabold-IHVTYVPB.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+.welcome-intro {
+  --intro-orange: #ff6b1a;
+  --intro-wordmark-w: min(1080px, max(360px, 70vw));
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.25rem;
+  background: #000000;
+  color: #ffffff;
+  font-family: var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+.welcome-intro-wordmark {
+  margin: 0;
+  font-family: "JetBrains Mono Bonk Intro", var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  color: var(--intro-orange);
+  font-size: min(26vw, calc(var(--intro-wordmark-w) / 2.4));
+  will-change: filter;
+}
+.welcome-intro-letters {
+  display: inline-flex;
+}
+.welcome-intro-letter {
+  display: inline-block;
+  will-change: transform, opacity;
+}
+.welcome-intro-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+.welcome-intro-hint .intro-kbd {
+  background: rgba(255, 107, 26, 0.12);
+  border-color: rgba(255, 107, 26, 0.4);
+  color: #ffb37a;
+}
+.intro-dot-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.045;
+}
+.intro-waveform {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.08;
+}
+.intro-waveform-bar {
+  width: 3px;
+  flex-shrink: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--welcome-intro-accent, #00ff85);
+}
+.intro-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: inherit;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #6b6b6b;
+}
+.intro-letter-reveal {
+  display: inline-flex;
+}
+.intro-letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.intro-letter[data-visible=true] {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-intro-wordmark {
+    will-change: auto;
+  }
+  .welcome-intro-letter {
+    opacity: 1;
+    transform: none;
+    will-change: auto;
+  }
+  .intro-letter {
+    transition: none;
+  }
+}

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>BONK — motion system v3 (reel-analysis primitives)</title>
+<style>
+  /* Bonk's own type, not a borrowed mono. Variable: wght 300-700 and slnt -10-0,
+     declared as a weight RANGE so canvas ctx.font can pick 400 or 600 off the
+     same file. woff2 first (133 KB), ttf behind it (474 KB). */
+  @font-face {
+    font-family: 'Bonk';
+    src: url('../blueprint/public/fonts/Bonk-VF.woff2') format('woff2'),
+         url('../blueprint/public/fonts/Bonk-VF.ttf') format('truetype');
+    font-weight: 300 700;
+    font-style: normal;
+    font-display: block;
+  }
+  /* ── THEME ────────────────────────────────────────────────────────────────
+     Colour lives HERE, not in the JS constants below. Those only carry the
+     fallback; applyTheme() copies these values in at boot, so a variant is a
+     variable change rather than a code edit.
+     Brand default (design.md): jet black ground, ONE orange accent.
+     ?ground=light swaps the register — same geometry, same motion. */
+  :root{
+    --ground:#000000;
+    --ink:#ffffff;
+    --accent:#ff6b1a;
+    --accent-soft:#ffb37a;
+    --hair:rgba(255,255,255,0.30);
+    --hair-dim:rgba(255,255,255,0.16);
+    --hair-bright:rgba(255,255,255,0.62);
+    --label:rgba(255,255,255,0.44);
+    /* Lowest alpha at which a primitive still reads as PRESENT on this
+       ground. Not a taste value: 0.12 is visible on black and invisible on
+       cream, so the two registers need different floors for the same
+       geometry. Measured: 0.12 on the light register left panels at 0.000%. */
+    --floor:0.12;
+  }
+  /* The reference reel is LIGHT-ground. Reading movement off it is the point;
+     copying its palette is not (design.md: the brand orange is the only colour
+     on a brand surface). This register exists for surfaces that need it. */
+  :root.light{
+    --ground:#f5f9e9;
+    --ink:#36453b;
+    --accent:#1e555c;
+    --accent-soft:#457069;
+    --hair:rgba(54,69,59,0.30);
+    --hair-dim:rgba(54,69,59,0.16);
+    --hair-bright:rgba(54,69,59,0.62);
+    --label:rgba(89,104,105,0.92);
+    --floor:0.38;
+  }
+  html, body { margin: 0; height: 100%; background: var(--ground); overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- single source of truth for the wordmark geometry: the traced paths produced
+     by blueprint/src/trace.py. Do not copy these into this file. -->
+<script src="../logo/current/bonk-mark.js"></script>
+<script>
+/**
+ * BONK — motion system v3
+ *
+ * v2 demonstrated eight primitives, all distilled from the same reference reel.
+ * Re-analysing that reel by measurement (not by eye) found four primitives the
+ * system was missing, and they are the reel's actual engine:
+ *
+ *   clip                     measured signature                     -> primitive
+ *   01 title-and-particles   ink 0.19->4.94->0.90%, peak@0.25       PARTICLE FIELD
+ *   07 confetti-particle     mean motion 1.142, corr radial/lin -0  (same family)
+ *   02 dot-sphere-mtn        bbox span 0.996 (full frame), peak@0.14 DOT LATTICE
+ *   04 language-specimen     ink 7.59->16.27->0.40%, peak@0.01       SPECIMEN GRID
+ *   05 fps-easing-diagrams   bbox span 0.975, 12 independent cells   (same family)
+ *   03 kinetic-type          ink ends 9.09% (HOLDS), drift y 0.426   KINETIC TYPE
+ *
+ * The two particle clips carry the highest mean motion in the whole reel (1.305
+ * and 1.142 against 0.119 for the calmest), and their frame-to-frame change
+ * correlates ~0 with BOTH a radial and a linear field (-0.05 / -0.03). That is
+ * the fingerprint of many independent elements, not one shared field — which is
+ * why neither v2's burst nor its push-in reproduces them.
+ *
+ * House rules (bonk design.md): jet black canvas, ONE accent (#ff6b1a), mono
+ * hairlines, no gradients, no noise, no borders.
+ *
+ * The mark is loaded from ../logo/current/bonk-mark.js — the asset you sent, exact
+ * vectors. v3 previously rendered wordmark-paths.js, a DIFFERENT mark (302.1x257.0,
+ * aspect 1.1755, 4 letters; IoU 0.342 against this one).
+ *
+ * Rendering is a pure function of time: renderAt(t). The rAF loop drives preview;
+ * __seek(t) drives capture, so the exported GIF is frame-identical to playback.
+ */
+
+/* Read the register BEFORE the theme is applied, or ?ground=light paints black
+   for one frame and the first capture comes out wrong. */
+const params = new URLSearchParams(location.search);
+if (params.get('ground') === 'light') document.documentElement.classList.add('light');
+
+/* Colour comes from the CSS custom properties in :root — CSS is the source of
+   truth, and these are only the fallbacks. They're `let` and mirrored from CSS by
+   applyTheme() because getComputedStyle() is far too slow to call per frame. */
+let ACCENT      = '#ff6b1a';
+let ACCENT_SOFT = '#ffb37a';
+let HAIR        = 'rgba(255,255,255,0.30)';
+let HAIR_DIM    = 'rgba(255,255,255,0.16)';
+let HAIR_BRIGHT = 'rgba(255,255,255,0.62)';
+let LABEL       = 'rgba(255,255,255,0.44)';
+let GROUND      = '#000000';
+let INK         = '#ffffff';
+let FLOOR       = 0.12;      // register-dependent; see :root --floor
+
+function applyTheme(){
+  const cs = getComputedStyle(document.documentElement);
+  const g = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
+  ACCENT      = g('--accent',      ACCENT);
+  ACCENT_SOFT = g('--accent-soft', ACCENT_SOFT);
+  HAIR        = g('--hair',        HAIR);
+  HAIR_DIM    = g('--hair-dim',    HAIR_DIM);
+  HAIR_BRIGHT = g('--hair-bright', HAIR_BRIGHT);
+  LABEL       = g('--label',       LABEL);
+  GROUND      = g('--ground',      GROUND);
+  INK         = g('--ink',         INK);
+  FLOOR       = parseFloat(g('--floor', String(FLOOR))) || FLOOR;
+}
+/* Re-reads the CSS variables AND repaints — re-reading alone leaves a stale frame
+   whenever the rAF loop has been cancelled by __seek(). */
+function applyThemeAndRedraw(){ applyTheme(); renderAt(lastT); }
+window.__applyTheme = applyThemeAndRedraw;
+window.__theme = () => ({ ground: GROUND, ink: INK, accent: ACCENT, accentSoft: ACCENT_SOFT });
+
+/* Safe to read here: the <style> block above is already applied. */
+applyTheme();
+
+/* all panels share one period and differ only by phase, so the whole grid loops
+   seamlessly and no panel is ever mid-cycle at the wrap. */
+const PERIOD = 6.0;
+const DURATION = PERIOD;
+
+const COLS = 2, ROWS = 2;
+
+/* ── easing ─────────────────────────────────────────────────────────────── */
+const clamp01  = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+const expoOut  = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const cubicOut = (t) => 1 - Math.pow(1 - t, 3);
+const power4Out= (t) => 1 - Math.pow(1 - t, 4);
+const inOut    = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+const lerp = (a, b, t) => a + (b - a) * t;
+/** progress within [a,b], clamped */
+const win = (t, a, b) => clamp01((t - a) / (b - a));
+/** deterministic per-index pseudo-random in [0,1) */
+const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+/** a winding sine in [0,1] — the lattice's radius field */
+const wave = (x) => 0.5 + 0.5 * Math.sin(x * Math.PI * 2);
+
+/* ── geometry ───────────────────────────────────────────────────────────── */
+const MARK = window.BONK_MARK;
+if (!MARK) throw new Error('bonk-mark.js did not load — check ../logo/current/');
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+const u = (n) => n * (H / 1080);
+
+/* hidden SVG host used only to measure path length / sample points */
+const sampleSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+sampleSvg.setAttribute('width', '0');
+sampleSvg.setAttribute('height', '0');
+sampleSvg.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
+document.body.appendChild(sampleSvg);
+
+/** Split an absolute-only path string into one string per subpath. */
+function splitSubpaths(d) {
+  const out = [];
+  for (const part of d.split(/(?=M )/)) if (part.trim().startsWith('M')) out.push(part.trim());
+  return out;
+}
+
+/** Sample each subpath into a polyline in MARK units (not screen space) so the
+ *  points can be re-projected into any panel without re-measuring. */
+function sampleSubpaths(d) {
+  return splitSubpaths(d).map((sub) => {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', sub);
+    sampleSvg.appendChild(p);
+    const total = p.getTotalLength();
+    const steps = Math.max(16, Math.round(total / 3));
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const pt = p.getPointAtLength((i / steps) * total);
+      pts.push({ x: pt.x, y: pt.y });
+    }
+    p.remove();
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    return { pts, len };
+  });
+}
+
+const SUBPATHS = sampleSubpaths(MARK.d);
+const BASE = new Path2D(MARK.d);              // mark units; transformed per use
+
+/* ── panels ─────────────────────────────────────────────────────────────── */
+/** Content box as fractions, then a grid split. No drawn borders. */
+const BOX = { l: 0.045, t: 0.185, r: 0.955, b: 0.880 };
+const GAP = { x: 0.035, y: 0.115 };
+
+let PANELS = [];
+
+function layout() {
+  W = window.innerWidth; H = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+
+  const x0 = BOX.l * W, x1 = BOX.r * W;
+  const y0 = BOX.t * H, y1 = BOX.b * H;
+  const pw = (x1 - x0 - GAP.x * W * (COLS - 1)) / COLS;
+  const ph = (y1 - y0 - GAP.y * H * (ROWS - 1)) / ROWS;
+
+  PANELS = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const i = r * COLS + c;
+      const px = x0 + c * (pw + GAP.x * W);
+      const py = y0 + r * (ph + GAP.y * H);
+      PANELS.push(makePanel(i, px, py, pw, ph));
+    }
+  }
+}
+
+function makePanel(i, px, py, pw, ph) {
+  /* fit the mark to ~54% of the panel width — wider than v2 because the specimen
+     panel subdivides the panel again and its cells need room */
+  const targetW = Math.min(pw * 0.54, (ph * 0.60) * (MARK.width / MARK.height));
+  const s = targetW / MARK.width;
+  const mw = MARK.width * s, mh = MARK.height * s;
+  const ox = px + (pw - mw) / 2;
+  const oy = py + (ph - mh) / 2;
+
+  const m = new DOMMatrix().translate(ox, oy).scale(s, s)
+                            .translate(-MARK.origin.x, -MARK.origin.y);
+  const path = new Path2D();
+  path.addPath(BASE, m);
+
+  return {
+    i, px, py, pw, ph,
+    ox, oy, s, mw, mh, m,
+    path,
+    cx: ox + mw / 2, cy: oy + mh / 2,
+    left: ox, right: ox + mw, top: oy, bot: oy + mh,
+    phase: i / (COLS * ROWS),          // desynchronise the grid
+  };
+}
+
+const P2 = (p, P) => ({ x: P.ox + p.x * P.s, y: P.oy + p.y * P.s });
+
+/* ── drawing helpers ────────────────────────────────────────────────────── */
+function hair(x1, y1, x2, y2, color, w) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w || 1;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+
+/** Bonk, the brand's own typeface. Renamed from mono() -- it is no longer one. */
+function typeface(size, weight) {
+  ctx.font = `${weight || 400} ${size}px 'Bonk', ui-sans-serif, sans-serif`;
+}
+
+function text(str, x, y, color, size, align, weight) {
+  typeface(size || 12, weight);
+  ctx.fillStyle = color;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(str, x, y);
+}
+
+/** horizontal rule growing from its centre — the blueprint draw-on feel */
+function hairCentre(y, cx, half, p, color, w) {
+  const h = half * expoOut(p);
+  hair(cx - h, y, cx + h, y, color, w);
+}
+
+/* ── the four new primitives ────────────────────────────────────────────────
+   Each takes (P, ph) where ph is 0..1 local progress through its own cycle.
+   Their windows are set from the measurements in the header, not from taste. */
+
+/**
+ * 09 — PARTICLE FIELD.  clips 01 + 07.
+ * ink 0.19->4.94->0.90% (sparse), motion peak@0.25 (front-loaded), and ~0
+ * correlation with both radial and linear fields — so: many independent
+ * elements on their own vectors, igniting together and drifting apart.
+ */
+const NPART = 220;
+function primParticle(P, ph) {
+  const burst = expoOut(win(ph, 0.00, 0.30));        // peak@0.25 in the reference
+  const drift = win(ph, 0.02, 1.0);
+  const fade  = win(ph, 0.70, 1.0);
+
+  for (let i = 0; i < NPART; i++) {
+    const ang = hash(i * 1.7 + 3.1) * Math.PI * 2;
+    const sp  = 0.22 + hash(i * 2.3 + 11.9) * 0.78;   // per-particle speed, no shared field
+    const rad = u(0.7) + u(2.4) * Math.pow(hash(i * 3.1 + 7.7), 2);
+    const d   = (u(16) + u(300) * burst * sp) + u(46) * drift * sp;
+    const x = P.cx + Math.cos(ang) * d;
+    const y = P.cy + Math.sin(ang) * d;
+
+    /* floor of 0.14: the reference opens at 0.19% ink, not at zero. Without the
+       floor this panel's first sample is empty and the grid pops on the loop wrap. */
+    const born = 0.32 + 0.68 * clamp01((burst - hash(i * 5.3 + 2.9) * 0.28) / 0.72);
+    /* raised 0.14 -> 0.32: at 0.14 the field was legible on the black ground but
+       the light register measured it at 0.005% -- a low-alpha accent over cream
+       falls outside its own ink threshold. The reference opens at 0.19%. */
+    ctx.globalAlpha = born * (1 - fade) * (0.34 + 0.66 * hash(i * 9.1 + 1.3));
+    ctx.fillStyle = hash(i * 4.7 + 5.5) > 0.86 ? ACCENT : ACCENT_SOFT;
+    const r = rad * (0.35 + 0.65 * born);
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  ctx.globalAlpha = 1;
+
+  /* the mark lands once the field has spread — the reel's title-plus-particles arc */
+  const land = win(ph, 0.42, 0.74);
+  if (land > 0) {
+    ctx.globalAlpha = cubicOut(land) * (1 - win(ph, 0.90, 1));
+    ctx.fillStyle = ACCENT;
+    ctx.fill(P.path);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/**
+ * 10 — DOT LATTICE.  clip 02.
+ * bbox span 0.996 — the content fills the frame, unlike every mark-fitting
+ * primitive. ink only 2.92% at peak, so the cells are small and far apart.
+ * Energy is front-loaded (peak@0.14): the field ignites, then breathes.
+ */
+const LAT_C = 13, LAT_R = 7;
+function primLattice(P, ph) {
+  const ignite = expoOut(win(ph, 0.00, 0.22));       // peak@0.14 in the reference
+  const sweep  = win(ph, 0.04, 1.0);
+  const fade   = win(ph, 0.78, 1.0);
+  const cw = P.pw / (LAT_C - 1);
+  const ch = P.ph / (LAT_R - 1);
+
+  for (let r = 0; r < LAT_R; r++) {
+    for (let c = 0; c < LAT_C; c++) {
+      const fx = c / (LAT_C - 1), fy = r / (LAT_R - 1);
+      const seed = hash(c * 7.3 + r * 3.1);
+      /* a diagonal wave crossing the lattice, each cell phase-offset by its own
+         hash so the field never reads as a single travelling front */
+      const w = wave(fx * 1.8 + fy * 1.1 - sweep * 1.6 + seed * 0.35);
+      /* floor at 42% radius, not zero. The reference's dot field ends at 0.16%
+         ink rather than nothing, and a hard zero gave this panel a 0.5s dead
+         tail (measured: 2 empty samples of 24). 42% radius = ~18% area, which
+         lands the panel near the reference's ending instead of at blank. */
+      /* ignite starts at 0, so at ph=0 every cell had rr=0 and the panel went
+         blank (measured 0.001% at t=4.50). Base radius and alpha are now floored
+         independently of the ignition ramp: the field is always present, and the
+         ramp modulates it rather than creating it. */
+      const field = 0.42 + 0.58 * ignite;
+      const rr = (u(1.4) + u(5.2) * w) * field * (1 - 0.45 * fade);
+      if (rr < 0.1) continue;
+      const x = P.px + c * cw, y = P.py + r * ch;
+      ctx.globalAlpha = (0.45 + 0.55 * w) * (1 - 0.30 * fade);
+      ctx.fillStyle = w > 0.82 ? ACCENT : ACCENT_SOFT;
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  /* a single hairline axis reads the lattice as a measured field, not a texture */
+  ctx.globalAlpha = 0.5 * ignite * (1 - fade);
+  hair(P.px, P.py + P.ph / 2 + 0.5, P.px + P.pw, P.py + P.ph / 2 + 0.5, HAIR_DIM, 1);
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * 11 — SPECIMEN GRID.  clips 04 + 05.
+ * The densest content in the reel: ink 7.59->16.27->0.40%, busy from frame one
+ * (peak@0.01) and cleared by the end. Twelve cells, each a real mark, some
+ * filled and some hairline, revealing on a diagonal stagger.
+ */
+const SPE_C = 4, SPE_R = 3;
+function primSpecimen(P, ph) {
+  const reveal = win(ph, 0.00, 0.58);
+  const clear  = win(ph, 0.64, 1.0);
+  const cw = P.pw / SPE_C, ch = P.ph / SPE_R;
+
+  for (let r = 0; r < SPE_R; r++) {
+    for (let c = 0; c < SPE_C; c++) {
+      const i = r * SPE_C + c;
+      const d = (c / (SPE_C - 1) + r / (SPE_R - 1)) / 2;   // diagonal stagger
+      const local = clamp01((reveal - d * 0.42) / 0.58);
+      /* floor of 0.18: clip 04 is BUSY from frame one (ink 7.59% at t=0, peak
+         at 0.01), so a grid that builds from nothing was unfaithful as well as
+         empty. The floor fades out with the clear, so the panel still ends light. */
+      const e = Math.max(cubicOut(local), FLOOR * (1 - clear));
+      if (e <= 0.001) continue;
+
+      const cellW = cw * 0.62, cellH = ch * 0.52;
+      const s = Math.min(cellW / MARK.width, cellH / MARK.height);
+      const ox = P.px + c * cw + (cw - MARK.width * s) / 2;
+      const oy = P.py + r * ch + (ch - MARK.height * s) / 2;
+
+      /* the cell's own mark, built from the shared base path — never a copy */
+      const m = new DOMMatrix().translate(ox, oy).scale(s, s)
+                            .translate(-MARK.origin.x, -MARK.origin.y);
+      const p = new Path2D();
+      p.addPath(BASE, m);
+
+      const hairline = hash(i * 6.1 + 4.4) > 0.72;        // a few cells read as outline
+      ctx.globalAlpha = e * (1 - clear) * (hairline ? 0.62 : 0.30 + 0.70 * e);
+      if (hairline) {
+        ctx.strokeStyle = ACCENT_SOFT; ctx.lineWidth = 1; ctx.stroke(p);
+      } else {
+        ctx.fillStyle = hash(i * 8.3 + 0.7) > 0.55 ? ACCENT : ACCENT_SOFT;
+        ctx.fill(p);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* the specimen's own caption line, the way the reel's specimen frames carry one */
+  const cap = win(ph, 0.20, 0.62) * (1 - clear);
+  if (cap > 0) {
+    ctx.globalAlpha = cap;
+    hairCentre(P.bot + u(26), P.cx, P.mw / 2 + u(20), cap, HAIR, 1);
+    ctx.globalAlpha = 1;
+    text('ABC 018', P.left, P.bot + u(42), LABEL, u(10));
+    text(`${SPE_C * SPE_R}`, P.right, P.bot + u(42), LABEL, u(10), 'right');
+  }
+}
+
+/**
+ * 12 — KINETIC TYPE.  clip 03.
+ * The only clip that HOLDS: ink ends at 9.09%, its highest value. It is also
+ * the largest single-axis travel in the reel, drift y 0.426, with the energy
+ * peaking late (0.61). So: bands of the mark slide up into register on a
+ * stagger, and then it stays.
+ */
+const KIN_B = 7;
+function primKinetic(P, ph) {
+  const inP  = win(ph, 0.00, 0.62);      // peak@0.61 in the reference
+  const hold = win(ph, 0.62, 0.92);
+  const out  = win(ph, 0.92, 1.0);
+  const bh = P.mh / KIN_B;
+
+  for (let b = 0; b < KIN_B; b++) {
+    const d = b / (KIN_B - 1);
+    const local = clamp01((inP - d * 0.30) / 0.70);
+    const e = expoOut(local);
+    if (e <= 0.001) continue;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(P.left - 2, P.top + b * bh - 1, P.mw + 4, bh + 2);
+    ctx.clip();
+    /* floor of 0.12: the reference opens at 0.16% ink, not zero. Each band is
+       clipped to its own slice, so a floored band shows its slice faintly rather
+       than the whole mark ghosting. */
+    ctx.globalAlpha = (FLOOR + (1 - FLOOR) * e) * (1 - out);
+    ctx.fillStyle = e > 0.86 ? ACCENT : ACCENT_SOFT;
+    ctx.translate(0, (1 - e) * P.mh * 0.42);          // slide up from below
+    ctx.fill(P.path);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  /* band seams, only while the type is still travelling — construction, not trim */
+  const seams = (1 - hold) * (1 - out);
+  if (seams > 0.02) {
+    ctx.globalAlpha = 0.22 * seams;
+    for (let b = 1; b < KIN_B; b++) hair(P.left, P.top + b * bh + 0.5, P.right, P.top + b * bh + 0.5, HAIR, 1);
+    ctx.globalAlpha = 1;
+  }
+}
+
+const PANEL_DEFS = [
+  { id: '09', label: 'PARTICLE FIELD', fn: primParticle,  src: 'clip 01+07' },
+  { id: '10', label: 'DOT LATTICE',    fn: primLattice,   src: 'clip 02' },
+  { id: '11', label: 'SPECIMEN GRID',  fn: primSpecimen,  src: 'clip 04+05' },
+  { id: '12', label: 'KINETIC TYPE',   fn: primKinetic,   src: 'clip 03' },
+];
+
+const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
+
+/* ── the scene ──────────────────────────────────────────────────────────── */
+let lastT = 0;              // so a theme change can repaint the current frame
+function renderAt(t) {
+  lastT = t;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = GROUND;
+  ctx.fillRect(0, 0, W, H);
+
+  PANELS.forEach((P) => {
+    const def = PANEL_DEFS[P.i];
+    const ph = ((t / PERIOD) + P.phase) % 1;
+
+    ctx.save();
+    /* Registration ghost: the mark is always faintly registered on the sheet.
+       Without it, primitives that resolve to nothing have a dead tail and the
+       panel visibly pops on reset. It also keeps the grid comparable. */
+    /* FLOOR, not a literal. At 0.09 this ghost cleared neither register's ink
+       threshold, yet it is precisely the element that guarantees no panel is
+       ever empty -- P12's bands translate out of their own clips at ph=0, so
+       nothing else is on screen. Register-aware or it does not do its job. */
+    ctx.globalAlpha = FLOOR;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.stroke(P.path);
+    ctx.restore();
+
+    ctx.save();
+    def.fn(P, ph);
+    ctx.restore();
+
+    /* label lives outside the primitive's clip; no panel borders (house rule) */
+    text(`${def.id}  ${def.label}`, P.px, P.py - u(11), LABEL, u(11));
+    text(def.src, P.px + P.pw, P.py - u(11), LABEL, u(10), 'right');
+  });
+
+  /* header + footer: the sheet's own labels */
+  text('BONK — MOTION SYSTEM v3', u(58), u(58), ACCENT, u(15), 'left', 600);
+  text('FOUR PRIMITIVES FROM MEASURED REEL ANALYSIS · MOTION ONLY, PALETTE IS BRAND',
+       u(58), u(80), LABEL, u(11));
+  const rightX = W - u(58);
+  text(`W ${fmt(MARK.width)}  H ${fmt(MARK.metrics.capHeight)}  STROKE ${fmt(MARK.metrics.stemWidth)}`,
+       rightX, u(58), LABEL, u(11), 'right');
+  text(`INK ${MARK.metrics.inkCoveragePct.toFixed(1)}%  PERIOD ${PERIOD.toFixed(1)}s  PHASE-DESYNCED`,
+       rightX, u(80), LABEL, u(11), 'right');
+}
+
+/* ── runtime ────────────────────────────────────────────────────────────── */
+let fixedT = params.has('t') ? parseFloat(params.get('t')) : null;
+let rafId = 0;
+
+layout();
+window.addEventListener('resize', () => { layout(); if (fixedT !== null) renderAt(fixedT); });
+
+window.__seek = (t) => {
+  /* stop the preview loop first, or rAF keeps drawing its own clock between the
+     seek and the screenshot and captures come out mixed. */
+  fixedT = t;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+  renderAt(t);
+};
+window.__duration = DURATION;
+window.__granularity = PERIOD / 8;
+window.__ready = (async () => {
+  try { await document.fonts.load("400 12px 'Bonk'"); } catch (e) {}
+  try { await document.fonts.load("600 12px 'Bonk'"); } catch (e) {}
+  await document.fonts.ready;
+  if (fixedT !== null) renderAt(fixedT);
+  return true;
+})();
+
+if (fixedT === null) {
+  const t0 = performance.now();
+  const loop = (now) => {
+    renderAt(((now - t0) / 1000) % DURATION);
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
+} else {
+  renderAt(fixedT);
+}
+</script>
+</body>
+</html>

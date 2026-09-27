@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bonk! intro — preview (real component)</title>
+<!--
+  PREVIEW of src/components/WelcomeIntro.tsx
+
+  This page loads a bundle built by esbuild from the ACTUAL component file
+  (framer-motion + gsap + react straight from bonk-beta/node_modules) — not a
+  re-implementation. The CSS is the real WelcomeIntro.css, including its
+  @font-face.
+
+  Rebuild:
+    cd bonk-beta
+    node_modules/.bin/esbuild .intro-preview-entry.tsx \
+      --bundle --format=esm --jsx=automatic \
+      --outdir="<this folder>" --entry-names=intro \
+      --loader:.ttf=file --asset-names=assets/[name]-[hash]
+-->
+<link rel="stylesheet" href="./intro-preview/intro.css" />
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="./intro-preview/intro.js"></script>
+</body>
+</html>
