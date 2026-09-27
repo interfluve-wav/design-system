@@ -1,0 +1,6 @@
+model scan — 2026-09-27 14:04:56
+1 pieces over http://127.0.0.1:8765 at 1280x720
+
+motion-assets/glow.html                      ok             22   10.00   0.136  
+
+1/1 pieces declare a model · 0 unmodelled · 0 failing

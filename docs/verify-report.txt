@@ -1,0 +1,149 @@
+====================================================================================================
+STATIC — literal hex colours per file, classified against #ff6b1a, #ffffff, #000000 (+/-25 deg hue, sat>0.15)
+====================================================================================================
+  blurreveal-v4       3 hex  brand-clean          
+  blurreveal-v4-lt    4 hex  2 off-brand hex      #36453bx3, #1e555cx3
+  blueprint           3 hex  brand-clean          
+  blueprint-v2        3 hex  2 off-brand hex      #f5e663x2, #fdf2adx2
+  blueprint-v3-sup    5 hex  2 off-brand hex      #8fb3a9x2, #b0a0d0x2
+  motion-system-v1    5 hex  brand-clean          
+  motion-system-v2    4 hex  brand-clean          
+  motion-system-v3    8 hex  3 off-brand hex      #36453bx1, #1e555cx1, #457069x1
+  dotcut-demo        36 hex  26 off-brand hex     #0a0014x5, #09090bx1, #8aa9ffx1, #1f45f5x1, #b8f2c9x1, #0f8a5fx1
+  bonk-logo          26 hex  15 off-brand hex     #ff006ex4, #1a0033x2, #0a0014x2, #ffb3c1x1, #ffe14dx1, #00ffd1x1
+  bonk-wordmark       6 hex  3 off-brand hex      #0a0014x1, #ff006ex1, #ffe14dx1
+  design-tiles       11 hex  6 off-brand hex      #f0c2f7x1, #22e58bx1, #7c4dffx1, #ffe14dx1, #18b6ffx1, #ff4fa3x1
+  libsdev             6 hex  brand-clean          
+  logo-lockup         8 hex  2 off-brand hex      #00ffd1x25, #ff006ex6
+  bonk-sup            6 hex  4 off-brand hex      #8fb3a9x1, #b0a0d0x1, #457069x1, #6e5f91x1
+  font-specimen      15 hex  3 off-brand hex      #0b0b0dx1, #556600x1, #338811x1
+  intro-preview       1 hex  brand-clean          
+
+  (near-achromatic hex is counted as in-family — a grey step between ink and ground
+   is not a brand violation, which is the false positive GOTCHAS 4.2 is about.)
+
+====================================================================================================
+RUNTIME — headless Chromium 1280x720 against http://127.0.0.1:8765
+====================================================================================================
+
+  [blurreveal-v4]  projects/blurreveal/public/v4-scenes.html
+    ready=True   duration=15.485   frames=16 (seek)
+    ink%  min  1.506  max  4.959  mean  3.781   dead frames 0
+    luma  min   2.12  max   8.69
+    hue   chromatic 381,113  orange 381,113  green 0  OFF-HUE 0
+    blocks: 12/12 draw inside their hold (min ink 1.608%)
+    theme flip: orange 16,020 -> 0 / green 0 -> 16,051   OK   restore OK
+    ?scene=N isolation: scene1=3.20%  scene2=4.82%  scene3=4.27%  scene4=1.68%
+
+  [blurreveal-v4-lt]  projects/blurreveal/public/v4-light-scenes.html
+    ready=True   duration=15.485   frames=16 (seek)
+    ink%  min 100.000  max 100.000  mean 100.000   dead frames 0
+    luma  min 239.92  max 244.86
+    hue   chromatic 391,507  orange 0  green 187,095  OFF-HUE 204,412
+    blocks: 12/12 draw inside their hold (min ink 100.000%)
+    theme flip: orange 0 -> 0 / green 8,086 -> 22,553   OK   restore FAIL
+
+  [blueprint]  projects/blueprint/public/bonk-blueprint.html
+    ready=True   duration=8   frames=16 (seek)
+    ink%  min  0.003  max 19.255  mean  9.776   dead frames 2
+    luma  min   0.01  max  26.26
+    hue   chromatic 1,615,586  orange 1,615,586  green 0  OFF-HUE 0
+    ! dead frames at t=[(0.0, 0.003), (7.47, 0.004)]
+    theme flip: orange 124 -> 0 / green 0 -> 124   OK   restore OK
+
+  [blueprint-v2]  projects/blueprint/public/bonk-blueprint-v2.html
+    ready=True   duration=8   frames=16 (seek)
+    ink%  min  0.003  max 10.667  mean  5.509   dead frames 2
+    luma  min   0.01  max  24.77
+    hue   chromatic 911,512  orange 0  green 0  OFF-HUE 911,512
+    ! dead frames at t=[(0.0, 0.003), (7.47, 0.004)]
+    theme flip: orange 0 -> 0 / green 0 -> 124   OK   restore OK
+
+  [blueprint-v3-sup]  projects/blueprint/public/bonk-blueprint-v3-sup.html
+    ready=True   duration=8.7   frames=16 (seek)
+    ink%  min  0.000  max 11.302  mean  6.277   dead frames 2
+    luma  min  11.01  max  29.36
+    hue   chromatic 964,535  orange 0  green 930,645  OFF-HUE 33,890
+    ! dead frames at t=[(0.0, 0.003), (8.12, 0.0)]
+    theme flip: orange 0 -> 0 / green 122 -> 129   OK   restore OK
+
+  [motion-system-v1]  projects/motion-system/bonk-motion-system.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min  3.435  max 11.265  mean  7.426   dead frames 0
+    luma  min   5.11  max  14.75
+    hue   chromatic 327,188  orange 327,188  green 0  OFF-HUE 0
+
+  [motion-system-v2]  projects/motion-system/bonk-motion-system-v2.html
+    ready=True   duration=4.4   frames=16 (seek)
+    ink%  min  7.790  max 13.777  mean 11.230   dead frames 0
+    luma  min  11.46  max  18.47
+    hue   chromatic 1,832,410  orange 1,832,410  green 0  OFF-HUE 0
+    theme flip: orange 86,420 -> 0 / green 0 -> 86,457   OK   restore OK
+
+  [motion-system-v3]  projects/motion-system/bonk-motion-system-v3.html
+    ready=True   duration=6   frames=16 (seek)
+    ink%  min  1.712  max  4.589  mean  3.282   dead frames 0
+    luma  min   2.10  max   6.14
+    hue   chromatic 540,616  orange 540,616  green 0  OFF-HUE 0
+    theme flip: orange 30,597 -> 0 / green 0 -> 30,612   OK   restore OK
+
+  [dotcut-demo]  projects/dotcut/public/dotcut-demo.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min 100.000  max 100.000  mean 100.000   dead frames 0
+    luma  min 147.23  max 172.61
+    hue   chromatic 4,603,669  orange 1,922,138  green 920,553  OFF-HUE 1,760,978
+    presets: ['DEFAULT', 'MONOLITH', 'KALEIDO', 'NEON']   active palettes: 6
+
+  [bonk-logo]  projects/dotcut/public/bonk-logo.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min 38.261  max 100.000  mean 63.141   dead frames 0
+    luma  min  89.20  max 162.38
+    hue   chromatic 2,754,786  orange 324,645  green 0  OFF-HUE 2,430,141
+
+  [bonk-wordmark]  projects/dotcut/public/bonk-wordmark.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min  1.603  max  1.603  mean  1.603   dead frames 0
+    luma  min   6.14  max   6.14
+    hue   chromatic 76,885  orange 62,440  green 0  OFF-HUE 14,445
+
+  [design-tiles]  projects/design-tiles/public/design-tiles-demo.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min  2.271  max  3.147  mean  2.673   dead frames 0
+    luma  min  13.47  max  14.11
+    hue   chromatic 104,176  orange 8,896  green 9,155  OFF-HUE 86,125
+
+  [libsdev]  projects/libs-dev/bonk-libsdev.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min 28.028  max 28.206  mean 28.111   dead frames 0
+    luma  min  59.71  max  60.61
+    hue   chromatic 1,629,607  orange 1,629,607  green 0  OFF-HUE 0
+
+  [logo-lockup]  projects/logo/logo-lockup-compare.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min  1.178  max  1.178  mean  1.178   dead frames 0
+    luma  min   8.06  max   8.06
+    hue   chromatic 12,725  orange 0  green 7,580  OFF-HUE 5,145
+    PAGE ERRORS: ["Cannot read properties of undefined (reading '0')"]
+
+  [bonk-sup]  projects/logo/bonk-sup.html
+    ready=eval failed: Page.evaluate: TypeError: window.__ready.then is not a function
+    at eval (eva   duration=None   frames=5 (live)
+    ink%  min 21.786  max 21.786  mean 21.786   dead frames 0
+    luma  min  45.38  max  45.38
+    hue   chromatic 1,000,755  orange 0  green 979,320  OFF-HUE 21,435
+
+  [font-specimen]  fonts/specimen.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min  5.668  max  5.668  mean  5.668   dead frames 0
+    luma  min  21.16  max  21.16
+    hue   chromatic 36,090  orange 36,090  green 0  OFF-HUE 0
+
+  [intro-preview]  projects/motion-system/bonk-intro-preview.html
+    ready=None   duration=None   frames=5 (live)
+    ink%  min  0.000  max 11.939  mean  9.539   dead frames 1
+    luma  min   0.16  max  15.82
+    hue   chromatic 447,386  orange 447,386  green 0  OFF-HUE 0
+    ! dead frames at t=[(1.26, 0.0)]
+
+wrote /Users/suhaas/.hermes/cache/scratch/verify/verify.json
+frames under /Users/suhaas/.hermes/cache/scratch/verify/frames
