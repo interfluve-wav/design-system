@@ -14,7 +14,8 @@ Verification in §4 was re-run in this pass — not inherited from an earlier su
 |---|---|
 | Build sandbox | `/Users/suhaas/Pictures/motion - design - assets` |
 | Delivered GIFs / MP4s | `/Users/suhaas/Pictures/design - tiles - motion` |
-| Public repo (partial) | https://github.com/interfluve-wav/design-system |
+| Public repo | https://github.com/interfluve-wav/design-system — **every project now**, 244 files |
+| Library repo | https://github.com/interfluve-wav/motion-system-v1 — private; the reusable component library |
 
 > ⚠️ **The GIF folder was renamed mid-session: `design - tiles` → `design - tiles - motion`.**
 > Every `~/Pictures/design - tiles/...` path written before 2026-09-27 06:10 is now stale,
@@ -274,17 +275,20 @@ theme flip needs `__rebuild()`, not just a variable change.
 
 ## 6. Gaps before a launch video can ship
 
-1. **No public host.** Everything is localhost + local files. The public repo
-   (`interfluve-wav/design-system`) tracks **only `projects/dotcut/`** — the other seven
-   projects have no version control at all. Options: GitHub Pages on that repo, or
-   Cloudflare Pages. Either gives real links and costs nothing.
+1. **No public host.** Everything is localhost + local files. *(The version-control half of
+   this gap closed 2026-09-27 PM — `design-system` now tracks every project, 244 files, and the
+   library has its own private repo. What remains is the host itself.)* GitHub Pages on that
+   repo, or Cloudflare Pages, would give real links and costs nothing.
 2. **No MP4 at launch quality.** Delivered motion is GIF, **1280×720 at 14.3 fps**. Fine for
    a README, not for a launch video. The `__seek` hooks make a 1080p/60 fps MP4 render a
    scripted job, not a re-do — but it hasn't been done for v4.
 3. **Demo chrome is baked into captures.** `V2 · BLUR-REVEAL`, `CUT · DIAGONAL`, the top-left
    BONK mark. Strippable via a `?chrome=0` flag or a CSS override; not stripped yet.
 4. **Audio.** Nothing exists. No music bed, no SFX.
-5. **No 9:16 / 1:1 cut.** Reels and shorts need a portrait render; the pages are 16:9.
+5. ~~**No 9:16 / 1:1 cut.**~~ **Closed 2026-09-27 PM** — `projects/instagram/` renders a
+   **1080×1920 portrait** reel (`reel.html` → `render.py`, 750 frames / 25 fps / 30 s) plus a
+   five-slide 1:1 carousel. Sources are in the repo; the MP4/GIF outputs are in the
+   deliverables folder.
 6. **Blueprint has no clean loop.** Black at both ends — fine for a shot, not for a loop.
 7. **The typeface lab** (`~/Documents/typeface-lab/`) is outside this sandbox and untouched.
 
@@ -293,6 +297,32 @@ theme flip needs `__rebuild()`, not just a variable change.
 ## 7. Changelog
 
 Newest first. One line per pass, with what changed and what it was measured against.
+
+**2026-09-27 PM** — version control closed out; library extracted, verified, and given history.
+- **Everything is under git.** `design-system` went from tracking only `projects/dotcut/` to
+  tracking **all 11 projects, 244 files**, in 11 commits. Pushed and verified — local and
+  remote HEAD match. `_archive/` stays out deliberately (recovery snapshots, duplicate font
+  binaries); `src`/`node_modules` are ignored as symlinks, root-anchored so they can't swallow
+  `projects/*/src/`.
+- **The reusable library has its own repo** — `interfluve-wav/motion-system-v1`, private,
+  41 files: the eight parameterised primitives, the shared runtime, the fonts, the
+  superscript drawing, and the verify suite. It still lives in the deliverables folder; only
+  its *history* moved. The folder is for outputs, the library is source.
+- **Fixed the logotype's placement in `07-push-in`.** It was **two** measurement bugs, not
+  one: the code centred on the lockup's ink **box** — which includes the mark's mostly-empty
+  lower-right corner — instead of its mass, and it measured the word **before**
+  `letterSpacing` was applied, so it used the untracked width. Horizontal imbalance went
+  **14px → 0**. New dial: `--brandCentre: 'word' | 'box'`.
+- **The palette question, settled by measurement.** Five hexes arrived from an extractor. Two
+  are exact tokens (`#ff6b1a`, `#000000`); one is white off by 1/255; one (`#E96218`) is the
+  brand orange *exactly* at alpha **0.9141** over black — identical 21.2° hue, not a second
+  colour; one (`#190E07`) is foreign. Noted that `design.md` defines a lighter orange
+  (`#ffb37a`) but **no darker one** — a real gap, not a duplicate.
+- `GOTCHAS.md` gained **8.18–8.26**: the font-stack order trap, wrong-cut tracking, the
+  bounding-box trap, "measure text in the state you draw it", and that `measureText().width`
+  is the advance rather than the ink.
+- The rebase against upstream hit a real conflict in `README.md` — both sides landed inside a
+  bash fence. Resolved by structure, keeping both; verified no markers remained.
 
 **2026-09-27 06:20** — Ledger created (`LEDGER.md`), linked from `README.md`.
 - Inventoried 9 projects, 62 GIFs, 5 MP4s, 3 PNGs.
